@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { GraduationCap, Award, Loader2, Users, Sparkles } from "lucide-react";
+import { GraduationCap, Award, Loader2, Users, Sparkles, X, Instagram } from "lucide-react";
+import { BOOKING_ONLINE_URL } from "@/config/constants";
 import { fadeUp, stagger } from "@/lib/motion";
 import { supabase } from "@/lib/supabase";
 import type { StaffProfile } from "@/types/database";
@@ -61,6 +62,7 @@ const FALLBACK_TEAM: StaffProfile[] = [
 export function Team() {
   const [staff, setStaff] = useState<StaffProfile[]>(FALLBACK_TEAM);
   const [loading, setLoading] = useState(true);
+  const [cv, setCv] = useState<StaffProfile | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,9 +146,14 @@ export function Team() {
                   </div>
                   <div className="p-6 md:p-7">
                     <p className="text-xs uppercase tracking-wider text-primary font-semibold mb-1">
-                      {s.title.toLowerCase().includes("terapis") ? "Terapis Anak" : "Psikolog Anak"}
+                      {s.role_label || (s.title.toLowerCase().includes("terapis") || !s.title.toLowerCase().includes("psikolog") ? "Terapis Anak" : "Psikolog Anak")}
                     </p>
                     <h3 className="font-heading font-bold text-2xl mb-2">{s.title}</h3>
+                    {s.campus && (
+                      <p className="text-xs text-text-secondary mb-2 inline-flex items-center gap-1">
+                        <GraduationCap size={12} className="text-primary" /> Lulusan {s.campus}
+                      </p>
+                    )}
                     {s.str_number && (
                       <p className="text-xs text-text-secondary mb-3 inline-flex items-center gap-1">
                         <Award size={12} className="text-primary" />
@@ -166,6 +173,16 @@ export function Team() {
                         ))}
                       </div>
                     )}
+                    <div className="flex flex-wrap gap-2">
+                      {s.is_bookable_online && (
+                        <a href={BOOKING_ONLINE_URL} className="text-xs px-4 py-2 rounded-full bg-primary text-white font-semibold hover:bg-primary-hover">
+                          Booking dengan {s.title.split(/[ ,]/)[0]}
+                        </a>
+                      )}
+                      <button onClick={() => setCv(s)} className="text-xs px-4 py-2 rounded-full border-2 border-primary text-primary font-semibold hover:bg-primary/10">
+                        Lihat profil
+                      </button>
+                    </div>
                     {/* Polaroid signature */}
                     <div className="mt-5 pt-4 border-t border-black/5">
                       <span className="font-accent text-2xl text-text-secondary/70">{s.title.split(" ")[0]}</span>
@@ -207,6 +224,48 @@ export function Team() {
           </div>
         </div>
       </section>
+      {cv && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setCv(null)}>
+          <div className="bg-white rounded-[2rem] max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-warm-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-4 mb-4">
+              {cv.photo_url ? (
+                <img src={cv.photo_url} alt={cv.title} className="w-20 h-20 rounded-2xl object-cover" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-black/5 flex items-center justify-center text-text-secondary/40"><Users size={28} /></div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs uppercase tracking-wider text-primary font-semibold">{cv.role_label || "Tim FlourishCare"}</p>
+                <h3 className="font-heading font-bold text-xl">{cv.title}</h3>
+                {cv.campus && <p className="text-xs text-text-secondary">Lulusan {cv.campus}</p>}
+              </div>
+              <button onClick={() => setCv(null)} className="p-1 hover:bg-black/5 rounded-full" aria-label="Tutup"><X size={18} /></button>
+            </div>
+            {cv.bio && <p className="text-sm text-text-secondary leading-relaxed mb-4">{cv.bio}</p>}
+            {[
+              ["Pendidikan", cv.education],
+              ["Izin praktik", cv.str_number],
+              ["Sertifikasi", cv.certifications],
+              ["Pengalaman", cv.experience],
+              ["Fokus", cv.focus],
+            ].filter(([, v]) => v).map(([l, v]) => (
+              <div key={l as string} className="mb-3">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider">{l}</p>
+                <p className="text-sm whitespace-pre-line">{v}</p>
+              </div>
+            ))}
+            {cv.specialties?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {cv.specialties.map((sp) => <span key={sp} className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{sp}</span>)}
+              </div>
+            )}
+            {cv.instagram && (
+              <a href={`https://instagram.com/${cv.instagram.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
+                <Instagram size={14} /> @{cv.instagram.replace(/^@/, "")}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

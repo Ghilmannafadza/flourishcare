@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { GrainOverlay } from "./components/GrainOverlay";
+import { WhatsAppFab } from "./components/WhatsAppFab";
 
 export function Layout() {
   return (
@@ -12,6 +13,7 @@ export function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <WhatsAppFab />
     </div>
   );
 }

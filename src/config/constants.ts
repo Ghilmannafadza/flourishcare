@@ -34,4 +34,4 @@ export const BOOKING_ONLINE_STATUS: "coming_soon" | "live" =
   "coming_soon";
 
 // Legal
-export const COPYRIGHT_YEAR_START = 2023;
+export const COPYRIGHT_YEAR_START = 2026; // PM: FlourishCare didirikan 2026

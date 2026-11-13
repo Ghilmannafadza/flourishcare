@@ -9,7 +9,27 @@ import { fadeUp } from "@/lib/motion";
 import { useWizard } from "../wizardContext";
 import { Stepper } from "../Stepper";
 
-import { HOMECARE_SERVICES, getHomecareService } from "@/lib/homecarePrices";
+import { getHomecareService } from "@/lib/homecarePrices";
+import { CLINIC_NAME } from "@/config/constants";
+
+// Kebijakan pembatalan & refund (serah-terima PM) — wajib dicentang sebelum bayar
+const KEBIJAKAN = [
+  "Pembatalan atau perubahan jadwal lebih dari 24 jam sebelum sesi: bisa reschedule atau refund penuh.",
+  "Pembatalan kurang dari 24 jam sebelum sesi: reschedule 1 kali, atau biaya hangus.",
+  "Bila psikolog/terapis berhalangan: refund penuh atau reschedule gratis, sesuai pilihan orang tua.",
+  "Booking online yang belum dibayar dalam batas waktu (10 menit) otomatis dibatalkan dan jamnya dibuka kembali.",
+];
+
+type Quote = {
+  service_fee: number;
+  admin_fee: number;
+  transport_fee: number;
+  total: number;
+  dp_percent: number | null;
+  due_now: number;
+  radius_km: number;
+  outside_radius: boolean;
+};
 
 // Fallback tarif kalau row di `online_booking_prices` belum ada.
 const FALLBACK_PRICE_ONLINE = 200_000;
@@ -32,6 +52,8 @@ export function StepPayment() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [policyOk, setPolicyOk] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [prices, setPrices] = useState<Record<string, number>>({
     online: FALLBACK_PRICE_ONLINE,
     homecare: FALLBACK_PRICE_HOMECARE,
@@ -79,6 +101,19 @@ export function StepPayment() {
     })();
   }, []);
 
+  // Rincian biaya resmi dihitung server (sama persis dengan yang ditagihkan)
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const { data: q } = await supabase.rpc("booking_quote", {
+        p_mode: data.mode,
+        p_homecare_service: data.mode === "homecare" ? data.homecare_service || null : null,
+        p_distance_km: data.mode === "homecare" ? Number(String(data.distance_km).replace(",", ".")) || 0 : 0,
+      });
+      if (q) setQuote(q as Quote);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [data.mode, data.homecare_service, data.distance_km]);
+
   // Untuk homecare, harga per layanan (BT/SI/OT/TW). Untuk online, harga tunggal.
   const homecareSvc = getHomecareService(data.homecare_service);
   const basePrice =
@@ -87,8 +122,11 @@ export function StepPayment() {
         ? (prices[homecareSvc.priceMode] ?? FALLBACK_PRICE_HOMECARE)
         : prices.homecare
       : prices.online;
-  const adminFee = prices.admin_fee;
-  const totalToPay = basePrice + adminFee;
+  const adminFee = quote ? Number(quote.admin_fee) : prices.admin_fee;
+  const serviceFee = quote ? Number(quote.service_fee) : basePrice;
+  const transportFee = quote ? Number(quote.transport_fee) : 0;
+  const totalToPay = quote ? Number(quote.total) : basePrice + adminFee;
+  const dueNow = quote ? Number(quote.due_now) : totalToPay;
   const serviceLabel =
     data.mode === "homecare"
       ? homecareSvc?.label ?? "Homecare Visit"
@@ -96,6 +134,10 @@ export function StepPayment() {
 
   async function handleConfirm() {
     if (!session) return;
+    if (!policyOk) {
+      setError("Centang persetujuan kebijakan pembatalan & refund terlebih dahulu.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -119,8 +161,12 @@ export function StepPayment() {
           duration_min: 60,
           homecare_address: data.mode === "homecare" ? data.homecare_address : null,
           homecare_service: data.mode === "homecare" ? (data.homecare_service || null) : null,
+          distance_km: data.mode === "homecare" ? Number(String(data.distance_km).replace(",", ".")) || 0 : null,
+          child_id: data.child_id || null,
+          policy_accepted_at: new Date().toISOString(),
+          // nominal & jenis bayar dihitung ulang oleh server (trigger online_booking_guard)
           amount: totalToPay,
-          payment_type: "full",
+          payment_type: data.mode === "homecare" ? "dp_50" : "full",
         })
         .select()
         .single();
@@ -202,6 +248,26 @@ export function StepPayment() {
             </div>
 
             {data.mode === "homecare" && (
+              <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Perkiraan jarak dari {CLINIC_NAME} (km)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={data.distance_km}
+                  onChange={(e) => update({ distance_km: e.target.value.replace(/[^\d.,]/g, "") })}
+                  placeholder="Contoh: 8"
+                  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  Cek di Google Maps. Radius layanan {quote?.radius_km ?? 10} km; di luar radius dikenakan biaya per km dan tergantung ketersediaan terapis.
+                </p>
+                {quote?.outside_radius && (
+                  <p className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                    Lokasi di luar radius {quote.radius_km} km — admin akan mengecek ketersediaan terapis/psikolog terlebih dahulu.
+                  </p>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Alamat Lengkap (Homecare)</label>
                 <textarea
@@ -213,7 +279,15 @@ export function StepPayment() {
                   className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
               </div>
+              </div>
             )}
+
+            <details className="bg-background rounded-3xl p-5 border border-black/5">
+              <summary className="font-semibold text-sm cursor-pointer">Kebijakan pembatalan & refund</summary>
+              <ul className="text-xs text-text-secondary list-disc pl-4 mt-3 space-y-1.5">
+                {KEBIJAKAN.map((k) => <li key={k}>{k}</li>)}
+              </ul>
+            </details>
           </div>
 
           {/* KANAN: Metode + tombol konfirmasi */}
@@ -238,8 +312,14 @@ export function StepPayment() {
                 <span className="text-text-secondary">
                   {data.mode === "homecare" ? (homecareSvc?.short ?? "Homecare") : "Jasa Psikolog"}
                 </span>
-                <span className="font-semibold">Rp {basePrice.toLocaleString("id-ID")}</span>
+                <span className="font-semibold">Rp {serviceFee.toLocaleString("id-ID")}</span>
               </div>
+              {data.mode === "homecare" && (
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Transport{data.distance_km ? ` (${data.distance_km} km)` : ""}</span>
+                  <span className="font-semibold">Rp {transportFee.toLocaleString("id-ID")}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-text-secondary">Biaya Admin</span>
                 <span className="font-semibold">Rp {adminFee.toLocaleString("id-ID")}</span>
@@ -250,22 +330,37 @@ export function StepPayment() {
                   Rp {totalToPay.toLocaleString("id-ID")}
                 </span>
               </div>
+              {data.mode === "homecare" && quote?.dp_percent != null && (
+                <div className="flex justify-between bg-primary/5 rounded-xl px-3 py-2">
+                  <span className="font-semibold">Bayar sekarang (DP {quote.dp_percent}%)</span>
+                  <span className="font-bold text-primary">Rp {dueNow.toLocaleString("id-ID")}</span>
+                </div>
+              )}
+              <p className="text-xs text-text-secondary">
+                {data.mode === "homecare"
+                  ? "Pelunasan dibayar setelah sesi (tunai/transfer ke admin)."
+                  : "Selesaikan pembayaran QRIS dalam 10 menit, atau booking otomatis batal."}
+              </p>
             </div>
 
+            <label className="flex items-start gap-2 text-xs text-text-secondary mb-3">
+              <input type="checkbox" checked={policyOk} onChange={(e) => setPolicyOk(e.target.checked)} className="mt-0.5" />
+              Saya sudah membaca dan menyetujui kebijakan pembatalan & refund.
+            </label>
             {error && (
               <div className="text-sm text-red bg-red/10 border border-red/20 rounded-2xl px-4 py-3 mb-3">{error}</div>
             )}
 
             <Button
               onClick={handleConfirm}
-              disabled={submitting || (data.mode === "homecare" && !data.homecare_address)}
+              disabled={submitting || !policyOk || (data.mode === "homecare" && (!data.homecare_address || !data.distance_km))}
               size="lg"
               className="w-full rounded-full shadow-warm mt-auto"
             >
               {submitting ? (
                 <><Loader2 className="animate-spin mr-2" size={18} /> Memproses…</>
               ) : (
-                "Konfirmasi Pembayaran"
+                `Bayar Rp ${dueNow.toLocaleString("id-ID")} dengan QRIS`
               )}
             </Button>
 

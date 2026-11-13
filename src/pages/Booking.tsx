@@ -10,6 +10,8 @@ import {
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSetting } from "@/lib/settings";
+import { formatWaDisplay, waLink } from "@/lib/wa";
 import { fadeUp, stagger } from "@/lib/motion";
 import {
   BOOKING_ONLINE_STATUS,
@@ -61,6 +63,7 @@ const CARDS: ServiceCard[] = [
 
 export function Booking() {
   const online = BOOKING_ONLINE_STATUS === "live";
+  const { value: contact } = useSetting("contact");
 
   return (
     <div>
@@ -155,6 +158,19 @@ export function Booking() {
             <p className="text-primary font-semibold text-sm mb-2 tracking-wider uppercase">Lokasi</p>
             <h2 className="text-2xl md:text-3xl font-heading font-bold mb-2">{CLINIC_NAME}</h2>
             <p className="text-text-secondary">{CLINIC_ADDRESS}</p>
+            {contact.wa && (
+              <p className="text-sm mt-1">
+                WhatsApp admin:{" "}
+                <a href={waLink(contact.wa, `${contact.greeting} tentang kunjungan ke klinik.`)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline">
+                  {formatWaDisplay(contact.wa)}
+                </a>
+              </p>
+            )}
+            <p className="text-sm text-text-secondary mt-3 bg-background border border-primary/10 rounded-2xl px-4 py-3">
+              Isi data anak dan orang tua sebelum kunjungan pertama di{" "}
+              <a href="https://assessment.flourishcare.id" className="text-primary font-semibold hover:underline">formulir pendaftaran</a>.
+              Hubungi admin kembali setelah mengisi formulir pendaftaran.
+            </p>
           </div>
           <div className="aspect-video rounded-3xl overflow-hidden bg-primary/5 border border-primary/10">
             <iframe

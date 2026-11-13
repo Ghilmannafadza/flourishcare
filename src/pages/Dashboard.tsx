@@ -19,7 +19,17 @@ import {
   LineChart,
   Loader2,
   RefreshCw,
+  Search,
+  MessagesSquare,
+  Brain,
+  TrendingUp,
+  FolderOpen,
+  Files,
+  Trash2,
+  BookText,
+  PenLine,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -27,7 +37,6 @@ import type { UserRole } from "@/types/database";
 import { OverviewView } from "@/features/dashboard/views/OverviewView";
 import { BookingsView } from "@/features/dashboard/views/BookingsView";
 import { OnlineBookingsView } from "@/features/dashboard/views/OnlineBookingsView";
-import { ScheduleView } from "@/features/dashboard/views/ScheduleView";
 import { PatientsView } from "@/features/dashboard/views/PatientsView";
 import { MedicalRecordsView } from "@/features/dashboard/views/MedicalRecordsView";
 import { FinanceView } from "@/features/dashboard/views/FinanceView";
@@ -36,41 +45,94 @@ import { SettingsView } from "@/features/dashboard/views/SettingsView";
 import { RegistrationsView } from "@/features/dashboard/views/RegistrationsView";
 import { ExaminationsView } from "@/features/dashboard/views/ExaminationsView";
 import { DevelopmentReportsView } from "@/features/dashboard/views/DevelopmentReportsView";
+import { CalendarView } from "@/features/dashboard/views/CalendarView";
+import { SearchView } from "@/features/dashboard/views/SearchView";
+import { AccountView, ChangePasswordSection } from "@/features/dashboard/views/AccountView";
+import { NarrativeBankSection } from "@/features/dashboard/views/SettingsExtras";
+import { ROLE_LABEL } from "@/features/dashboard/views/SettingsView";
+import { ConsultationView } from "@/features/reports/ConsultationView";
+import { EvaluationView } from "@/features/reports/EvaluationView";
+import { PsychotestView } from "@/features/reports/PsychotestView";
+import { ReportListView } from "@/features/reports/ReportListView";
+import type { ReportKind } from "@/features/reports/reportKinds";
 
 type TabKey =
   | "overview"
+  | "search"
   | "bookings"
   | "online_bookings"
   | "schedule"
   | "registrations"
   | "patients"
   | "examinations"
+  | "consultations"
+  | "psychotests"
   | "development_reports"
+  | "evaluations"
+  | "my_reports"
+  | "all_reports"
   | "records"
+  | "narrative"
+  | "trash"
   | "finance"
   | "attendance"
+  | "account"
   | "settings";
 
+const ALL: UserRole[] = ["super_admin", "admin_cabang", "psikolog", "terapis", "karyawan"];
+
+// Hak akses mengikuti serah-terima PM:
+// Admin Operasional (admin_cabang) = booking, kalender, pendaftaran, data pasien, pembayaran manual.
+// Super Admin = semua + tim, akun staf, jadwal, tarif, pengesahan, backup, sampah, kontak.
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard; roles: UserRole[] }> = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard, roles: ["super_admin", "admin_cabang", "psikolog", "terapis", "karyawan"] },
-  { key: "bookings", label: "Booking", icon: ClipboardList, roles: ["super_admin", "admin_cabang"] },
-  { key: "online_bookings", label: "Booking Online", icon: Video, roles: ["super_admin", "admin_cabang", "psikolog"] },
-  { key: "schedule", label: "Jadwal", icon: CalendarDays, roles: ["super_admin", "admin_cabang", "psikolog", "terapis", "karyawan"] },
+  { key: "overview", label: "Overview", icon: LayoutDashboard, roles: ALL },
+  { key: "search", label: "Pencarian", icon: Search, roles: ["super_admin", "admin_cabang"] },
+  { key: "online_bookings", label: "Booking Online", icon: Video, roles: ["super_admin", "admin_cabang", "psikolog", "terapis"] },
+  { key: "schedule", label: "Kalender", icon: CalendarDays, roles: ["super_admin", "admin_cabang", "psikolog", "terapis"] },
+  { key: "bookings", label: "Booking Klinik", icon: ClipboardList, roles: ["super_admin", "admin_cabang"] },
   { key: "registrations", label: "Pendaftaran Pasien", icon: UserPlus, roles: ["super_admin", "admin_cabang"] },
-  { key: "patients", label: "Pasien", icon: Users, roles: ["super_admin", "admin_cabang", "psikolog", "terapis"] },
-  { key: "examinations", label: "Pemeriksaan", icon: Stethoscope, roles: ["super_admin", "psikolog"] },
-  { key: "development_reports", label: "Laporan Perkembangan", icon: LineChart, roles: ["super_admin", "psikolog", "terapis"] },
+  { key: "patients", label: "Data Pasien", icon: Users, roles: ["super_admin", "admin_cabang", "psikolog", "terapis"] },
+  { key: "development_reports", label: "Laporan Sesi (FRM-008)", icon: LineChart, roles: ["super_admin", "psikolog", "terapis"] },
+  { key: "evaluations", label: "Evaluasi Perkembangan", icon: TrendingUp, roles: ["super_admin", "psikolog", "terapis"] },
+  { key: "examinations", label: "Asesmen (FRM-005)", icon: Stethoscope, roles: ["super_admin", "psikolog"] },
+  { key: "consultations", label: "Konsultasi (FRM-006)", icon: MessagesSquare, roles: ["super_admin", "psikolog"] },
+  { key: "psychotests", label: "Psikotes", icon: Brain, roles: ["super_admin", "psikolog"] },
+  { key: "my_reports", label: "Laporan Saya", icon: FolderOpen, roles: ["super_admin", "psikolog", "terapis"] },
+  { key: "all_reports", label: "Semua Laporan", icon: Files, roles: ["super_admin", "admin_cabang"] },
   { key: "records", label: "Rekam Medis", icon: FileText, roles: ["super_admin", "psikolog"] },
+  { key: "narrative", label: "Bank Narasi", icon: BookText, roles: ["super_admin", "psikolog"] },
+  { key: "trash", label: "Sampah Laporan", icon: Trash2, roles: ["super_admin"] },
   { key: "finance", label: "Keuangan", icon: Wallet, roles: ["super_admin", "admin_cabang"] },
-  { key: "attendance", label: "Presensi", icon: Fingerprint, roles: ["super_admin", "admin_cabang", "psikolog", "terapis", "karyawan"] },
-  { key: "settings", label: "Pengaturan", icon: Settings, roles: ["super_admin", "admin_cabang"] },
+  { key: "attendance", label: "Presensi", icon: Fingerprint, roles: ALL },
+  { key: "account", label: "Tanda Tangan & Akun", icon: PenLine, roles: ALL },
+  { key: "settings", label: "Pengaturan", icon: Settings, roles: ["super_admin"] },
 ];
+
+const KIND_TAB: Record<ReportKind, TabKey> = {
+  sesi: "development_reports",
+  evaluasi: "evaluations",
+  asesmen: "examinations",
+  konsultasi: "consultations",
+  psikotes: "psychotests",
+};
 
 export function Dashboard() {
   const { profile, role, signOut, profileLoading, refresh } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mustChange, setMustChange] = useState(false);
+
+  // Akun staf baru / reset: wajib ganti kata sandi sementara
+  useEffect(() => {
+    if (!profile?.id) return;
+    void supabase
+      .from("profiles")
+      .select("must_change_password")
+      .eq("id", profile.id)
+      .maybeSingle()
+      .then(({ data }) => setMustChange(Boolean((data as { must_change_password?: boolean } | null)?.must_change_password)));
+  }, [profile?.id]);
 
   const visibleTabs = useMemo(
     () => (role ? TABS.filter((t) => t.roles.includes(role)) : TABS.filter((t) => t.key === "overview")),
@@ -125,7 +187,7 @@ export function Dashboard() {
           <div className="px-3 py-2 mb-2">
             <p className="text-xs text-text-secondary">Masuk sebagai</p>
             <p className="text-sm font-semibold text-text-primary truncate">{profile?.full_name ?? "-"}</p>
-            <p className="text-xs text-primary capitalize">{role?.replace("_", " ") ?? ""}</p>
+            <p className="text-xs text-primary">{role ? ROLE_LABEL[role] ?? role : ""}</p>
           </div>
           <button
             onClick={handleLogout}
@@ -163,12 +225,26 @@ export function Dashboard() {
             <ProfileLoadingBlock />
           ) : !profile ? (
             <ProfileNotFoundBanner onRetry={refresh} onLogout={handleLogout} />
+          ) : profile.is_active === false ? (
+            <div className="max-w-2xl mx-auto bg-white rounded-2xl p-8 border border-primary/10 text-center">
+              <h2 className="text-xl font-heading font-bold mb-2">Akun dinonaktifkan</h2>
+              <p className="text-sm text-text-secondary">Hubungi Super Admin untuk mengaktifkan kembali akun Anda.</p>
+            </div>
           ) : (
             <>
-              {tab === "overview" && <OverviewView />}
+              {tab === "overview" && <OverviewView onWrite={(k) => setTab(KIND_TAB[k])} onBackup={() => setTab("settings")} />}
+              {tab === "search" && <SearchView onOpen={(t) => setTab(t)} />}
+              {tab === "consultations" && <ConsultationView />}
+              {tab === "psychotests" && <PsychotestView />}
+              {tab === "evaluations" && <EvaluationView />}
+              {tab === "my_reports" && <ReportListView mode="mine" />}
+              {tab === "all_reports" && <ReportListView mode="all" />}
+              {tab === "trash" && <ReportListView mode="trash" />}
+              {tab === "narrative" && <NarrativeBankSection />}
+              {tab === "account" && <AccountView />}
               {tab === "bookings" && <BookingsView />}
               {tab === "online_bookings" && <OnlineBookingsView />}
-              {tab === "schedule" && <ScheduleView />}
+              {tab === "schedule" && <CalendarView />}
               {tab === "registrations" && <RegistrationsView />}
               {tab === "patients" && <PatientsView />}
               {tab === "examinations" && <ExaminationsView />}
@@ -180,6 +256,13 @@ export function Dashboard() {
             </>
           )}
         </main>
+        {mustChange && profile && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-warm-lg">
+              <ChangePasswordSection forced onDone={() => setMustChange(false)} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

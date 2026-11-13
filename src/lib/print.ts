@@ -8,12 +8,16 @@ export function printWithTitle(fileTitle: string) {
   const originalTitle = document.title;
   const safe = (fileTitle || "dokumen").replace(/[\\/:*?"<>|]/g, "-").trim();
   document.title = safe;
+  // Hanya area .fc-print-area yang dicetak (lihat index.css) bila ada di halaman
+  const hasArea = !!document.querySelector(".fc-print-area");
+  if (hasArea) document.body.classList.add("fc-print-doc");
   // Delay kecil agar browser sempat baca title baru sebelum dialog print terbuka
   setTimeout(() => {
     window.print();
     // Restore title setelah dialog print ditutup / setelah delay
     setTimeout(() => {
       document.title = originalTitle;
+      document.body.classList.remove("fc-print-doc");
     }, 1000);
   }, 50);
 }

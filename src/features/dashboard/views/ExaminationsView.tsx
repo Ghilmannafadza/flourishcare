@@ -7,6 +7,10 @@ import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
 import { fetchAssessedChildren } from "@/features/dashboard/queries";
 import type { Child } from "@/types/database";
 import { printWithTitle, isoDate } from "@/lib/print";
+import { LifecycleActions, StatusBadge } from "@/features/reports/ReportLifecycle";
+import { ReportModal } from "@/features/reports/PatientReportShell";
+import { AssessmentDocument } from "@/features/reports/ReportDocuments";
+import { takePrefill, type AnyReport } from "@/features/reports/reportKinds";
 
 type Exam = {
   id: string;
@@ -26,6 +30,9 @@ type Exam = {
   objective_info: string | null;
   conclusion: string | null;
   created_at: string;
+  examiner_id: string;
+  status: "draft" | "terbit";
+  deleted_at: string | null;
 };
 
 const LEVELS = [
@@ -47,8 +54,9 @@ const FOLLOW_UP_OPTIONS = [
 ];
 
 export function ExaminationsView() {
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const canWrite = role === "super_admin" || role === "psikolog";
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [children, setChildren] = useState<Child[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -65,7 +73,11 @@ export function ExaminationsView() {
       // Anak dari booking online (belum punya RM) tidak muncul di sini.
       const data = await fetchAssessedChildren(500);
       setChildren(data);
-      if (data[0]) setSelected(data[0].id);
+      const pre = takePrefill();
+      if (pre && data.some((c) => c.id === pre.child_id)) {
+        setSelected(pre.child_id);
+        setShowForm(true);
+      } else if (data[0]) setSelected(data[0].id);
       setLoading(false);
     })();
   }, []);
@@ -77,10 +89,12 @@ export function ExaminationsView() {
         .from("medical_examinations")
         .select("*")
         .eq("child_id", selected)
+        .is("deleted_at", null)
         .order("examination_date", { ascending: false });
-      setExams((data as Exam[]) ?? []);
+      // Draft milik orang lain tidak ditampilkan (kecuali Super Admin)
+      setExams(((data as Exam[]) ?? []).filter((e) => e.status === "terbit" || role === "super_admin" || e.examiner_id === profile?.id));
     })();
-  }, [selected, showForm, editExam]);
+  }, [selected, showForm, editExam, reloadKey, role, profile?.id]);
 
   if (loading) return <LoadingBlock />;
   if (children.length === 0)
@@ -123,6 +137,7 @@ export function ExaminationsView() {
               <div key={ex.id} className="bg-white rounded-2xl border border-black/5 p-4 shadow-warm-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
+                    <div className="mb-1"><StatusBadge row={ex as unknown as AnyReport} /></div>
                     <p className="font-semibold text-sm">
                       Pemeriksaan {new Date(ex.examination_date).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}
                     </p>
@@ -140,13 +155,14 @@ export function ExaminationsView() {
                     <Button size="sm" variant="outline" onClick={() => setDetailExam(ex)} className="rounded-full border-2">
                       Detail
                     </Button>
-                    {canWrite && (
+                    {canWrite && (ex.examiner_id === profile?.id || role === "super_admin") && (
                       <Button size="sm" variant="outline" onClick={() => setEditExam(ex)} className="rounded-full border-2">
                         <Pencil size={12} className="mr-1" /> Edit
                       </Button>
                     )}
                   </div>
                 </div>
+                <LifecycleActions kind="asesmen" row={ex as unknown as AnyReport} onChanged={() => setReloadKey((k) => k + 1)} />
               </div>
             ))}
           </div>
@@ -244,13 +260,13 @@ function ExaminationForm({
     setFollowUp((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
   }
 
-  async function save() {
+  async function save(status: "draft" | "terbit") {
     if (!profile) return;
     setSaving(true);
     setErr(null);
     const payload = {
       child_id: childId,
-      examiner_id: profile.id,
+      status,
       examination_date: examDate,
       patient_age: age || null,
       chief_complaint: complaint || null,
@@ -280,6 +296,7 @@ function ExaminationForm({
     } else {
       const { error: e } = await supabase.from("medical_examinations").insert({
         ...payload,
+        examiner_id: profile.id,
         signed_at: new Date().toISOString(),
       });
       error = e;
@@ -364,9 +381,20 @@ function ExaminationForm({
 
           <div className="flex justify-end gap-2 pt-4 border-t border-black/5">
             <Button variant="outline" onClick={onClose} className="rounded-full border-2">Batal</Button>
-            <Button onClick={save} disabled={saving} className="rounded-full shadow-warm">
-              {saving ? <><Loader2 className="animate-spin mr-2" size={14} /> Menyimpan…</> : <><Save size={14} className="mr-2" /> {isEdit ? "Simpan Perubahan" : "Simpan Laporan"}</>}
-            </Button>
+            {isEdit && initialExam?.status === "terbit" ? (
+              <Button onClick={() => save("terbit")} disabled={saving} className="rounded-full shadow-warm">
+                {saving ? <><Loader2 className="animate-spin mr-2" size={14} /> Menyimpan…</> : <><Save size={14} className="mr-2" /> Simpan Perubahan</>}
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => save("draft")} disabled={saving} className="rounded-full border-2">
+                  Simpan Draft
+                </Button>
+                <Button onClick={() => save("terbit")} disabled={saving} className="rounded-full shadow-warm">
+                  {saving ? <><Loader2 className="animate-spin mr-2" size={14} /> Menyimpan…</> : <><Save size={14} className="mr-2" /> Simpan & Terbitkan</>}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -378,100 +406,30 @@ function ExaminationForm({
 
 function ExaminationDetail({ exam, child, onClose }: { exam: Exam; child: Child | undefined; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto print:static print:bg-white print:p-0">
-      <div className="bg-white rounded-3xl max-w-3xl w-full my-8 shadow-warm-lg print:shadow-none print:rounded-none">
-        <div className="sticky top-0 bg-white border-b border-black/5 px-6 py-4 flex items-center justify-between rounded-t-3xl print:hidden">
-          <h2 className="font-heading font-bold text-lg">Laporan Pemeriksaan</h2>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                printWithTitle(
-                  `FRM-005_${child?.rm_number ?? "RM"}_${(child?.full_name ?? "").replace(/\s+/g, "-")}_${isoDate(exam.examination_date)}`
-                )
-              }
-              className="rounded-full border-2"
-            >
-              <Printer size={14} className="mr-1" /> Print / PDF
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onClose} className="rounded-full"><X size={16} /></Button>
-          </div>
-        </div>
-
-        <div className="p-6 md:p-8 text-sm space-y-4">
-          <div className="hidden print:block text-center mb-6 pb-4 border-b-2 border-black">
-            <div className="flex justify-center gap-4 items-center mb-3">
-              <img src="/mitra-diani-logo.png" alt="Mitra Diani" style={{ height: 60 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-              <img src="/logo.png" alt="FlourishCare" style={{ height: 60 }} />
-            </div>
-            <h1 className="text-2xl font-bold">Laporan Pemeriksaan</h1>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 pb-3 border-b border-black/10">
-            <div><strong>Nama:</strong> {child?.full_name ?? "-"}</div>
-            <div><strong>Tanggal:</strong> {new Date(exam.examination_date).toLocaleDateString("id-ID")}</div>
-            <div><strong>Usia:</strong> {exam.patient_age ?? "-"}</div>
-            <div><strong>Diagnosa:</strong> {exam.diagnosis ?? "-"}</div>
-          </div>
-
-          {exam.chief_complaint && <DetailRow label="Keluhan Awal" value={exam.chief_complaint} />}
-          <DetailSection title="Aspek Bahasa">
-            {Object.entries(exam.language_aspects).map(([k, v]) => (
-              <DetailRow key={k} label={k.replace(/_/g, " ")} value={String(v || "-")} />
-            ))}
-          </DetailSection>
-          <DetailSection title="Aspek Motorik">
-            {Object.entries(exam.motor_aspects).map(([k, v]) => (
-              <DetailRow key={k} label={k.replace(/_/g, " ")} value={String(v || "-")} />
-            ))}
-          </DetailSection>
-          <DetailSection title="Aspek Sensorik">
-            {Object.entries(exam.sensory_aspects).map(([k, v]) => (
-              <DetailRow key={k} label={k.replace(/_/g, " ")} value={String(v || "-")} />
-            ))}
-          </DetailSection>
-          <DetailSection title="Aspek Lainnya">
-            {Object.entries(exam.other_aspects).map(([k, v]) => (
-              <DetailRow key={k} label={k.replace(/_/g, " ")} value={String(v || "-")} />
-            ))}
-          </DetailSection>
-          {exam.follow_up_plan.length > 0 && (
-            <div>
-              <p className="font-bold mb-1">Rencana Lanjutan:</p>
-              <div className="flex flex-wrap gap-1">
-                {exam.follow_up_plan.map((p) => (
-                  <span key={p} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{p}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {exam.additional_notes && <DetailRow label="Catatan Tambahan" value={exam.additional_notes} />}
-          {exam.subjective_info && <DetailRow label="Informasi Subjektif" value={exam.subjective_info} />}
-          {exam.objective_info && <DetailRow label="Informasi Objektif" value={exam.objective_info} />}
-          {exam.conclusion && <DetailRow label="Kesimpulan" value={exam.conclusion} />}
-        </div>
-      </div>
-    </div>
+    <ReportModal
+      title="Laporan Hasil Asesmen (FRM-005)"
+      subtitle={child ? `${child.full_name} · RM ${child.rm_number}` : undefined}
+      onClose={onClose}
+      actions={
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            printWithTitle(
+              `FRM-005_${child?.rm_number ?? "RM"}_${(child?.full_name ?? "").replace(/\s+/g, "-")}_${isoDate(exam.examination_date)}`
+            )
+          }
+          className="rounded-full border-2"
+        >
+          <Printer size={14} className="mr-1" /> Print / PDF
+        </Button>
+      }
+    >
+      {child && <AssessmentDocument row={exam as unknown as AnyReport} child={child} />}
+    </ReportModal>
   );
 }
 
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="font-heading font-bold text-base pb-1 mb-2 border-b border-primary/30 text-primary">{title}</p>
-      <div className="space-y-1">{children}</div>
-    </div>
-  );
-}
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-3 py-1">
-      <span className="w-40 flex-shrink-0 text-text-secondary capitalize text-xs">{label}</span>
-      <span className="flex-1 whitespace-pre-line">{value}</span>
-    </div>
-  );
-}
 
 // ============ Small helpers ============
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

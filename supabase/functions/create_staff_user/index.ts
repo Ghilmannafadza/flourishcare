@@ -88,6 +88,7 @@ serve(async (req) => {
       branch_id,
       phone,
       is_active: true,
+      must_change_password: true, // PM: sandi sementara wajib diganti saat login pertama
     });
     if (insertErr) {
       // Rollback: hapus auth user kalau profile insert gagal

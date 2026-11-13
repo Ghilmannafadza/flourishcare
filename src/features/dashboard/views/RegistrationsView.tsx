@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
 import { printWithTitle, isoDate } from "@/lib/print";
 import { useAuth } from "@/providers/AuthProvider";
+import { waLink, formatWaDisplay } from "@/lib/wa";
+
+const SERVICE_LABEL: Record<string, string> = {
+  TERAPI: "Terapi di klinik (SI / TW / OT / BT)",
+  KONSUL: "Assessment/Konsultasi Psikolog On-Site",
+  PSIKOTES: "Psikotes",
+};
 
 type Registration = {
   id: string;
@@ -33,6 +40,10 @@ type Registration = {
   status: "pending_rm" | "rm_assigned" | "archived";
   rm_number: string | null;
   submitter_email: string | null;
+  linked_child_id?: string | null;
+  contact_whatsapp?: string | null;
+  requested_service?: string | null;
+  source?: string | null;
   // Other fields not shown in list
   [k: string]: unknown;
 };
@@ -92,7 +103,8 @@ export function RegistrationsView() {
 
 function RegCard({ r, onView, onUpdated }: { r: Registration; onView: () => void; onUpdated: () => void }) {
   const { role } = useAuth();
-  const isSuperAdmin = role === "super_admin";
+  // PM: Admin Operasional & Super Admin boleh menghapus pendaftaran
+  const isSuperAdmin = role === "super_admin" || role === "admin_cabang";
   const [showRmForm, setShowRmForm] = useState(false);
   const [rmValue, setRmValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -135,11 +147,11 @@ function RegCard({ r, onView, onUpdated }: { r: Registration; onView: () => void
       .update({ rm_number: rmValue.trim() })
       .eq("id", r.id);
     if (e1) { setErr(e1.message); setSaving(false); return; }
-    if ((r as { linked_child_id?: string }).linked_child_id) {
+    if (r.linked_child_id) {
       await supabase
         .from("children")
         .update({ rm_number: rmValue.trim() })
-        .eq("id", (r as { linked_child_id: string }).linked_child_id);
+        .eq("id", r.linked_child_id);
     }
     setSaving(false);
     setEditMode("none");
@@ -159,11 +171,11 @@ function RegCard({ r, onView, onUpdated }: { r: Registration; onView: () => void
       })
       .eq("id", r.id);
     if (error) { setErr(error.message); setSaving(false); return; }
-    if ((r as { linked_child_id?: string }).linked_child_id) {
+    if (r.linked_child_id) {
       await supabase
         .from("children")
         .update({ full_name: editName.trim(), dob: editDob || null })
-        .eq("id", (r as { linked_child_id: string }).linked_child_id);
+        .eq("id", r.linked_child_id);
     }
     setSaving(false);
     setEditMode("none");
@@ -197,6 +209,20 @@ function RegCard({ r, onView, onUpdated }: { r: Registration; onView: () => void
             {r.date_of_birth && ` · Lahir ${new Date(r.date_of_birth).toLocaleDateString("id-ID")}`}
             {r.submitter_email && ` · ${r.submitter_email}`}
           </p>
+          {(r.contact_whatsapp || r.requested_service) && (
+            <p className="text-xs text-text-secondary mt-1">
+              {r.requested_service && <span className="font-semibold text-text-primary">{SERVICE_LABEL[r.requested_service] ?? r.requested_service}</span>}
+              {r.contact_whatsapp && (
+                <>
+                  {r.requested_service ? " · " : ""}WA{" "}
+                  <a href={waLink(r.contact_whatsapp, `Halo Bapak/Ibu, kami dari FlourishCare terkait pendaftaran ${r.patient_name} (${r.code}).`)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    {formatWaDisplay(r.contact_whatsapp)}
+                  </a>
+                </>
+              )}
+              {r.mother_name && ` · Ibu: ${r.mother_name}`}
+            </p>
+          )}
           {r.chief_complaint && (
             <p className="text-xs text-text-secondary mt-2 line-clamp-2">
               <span className="font-semibold text-text-primary">Keluhan:</span> {r.chief_complaint}
@@ -352,7 +378,7 @@ function RegistrationDetailModal({ reg, onClose }: { reg: Registration; onClose:
           </div>
         </div>
 
-        <div className="p-6 md:p-8 space-y-6 text-sm">
+        <div className="p-6 md:p-8 space-y-6 text-sm fc-print-area">
           {/* Header untuk print */}
           <div className="hidden print:block text-center mb-6 pb-4 border-b-2 border-black">
             <div className="flex justify-center gap-4 items-center mb-3">
@@ -362,6 +388,14 @@ function RegistrationDetailModal({ reg, onClose }: { reg: Registration; onClose:
             <h1 className="text-2xl font-bold">Formulir Pendaftaran</h1>
             <p className="text-xs italic text-text-secondary">(Confidential)</p>
           </div>
+
+          {(reg.requested_service || reg.contact_whatsapp) && (
+            <Section title="Layanan & Kontak">
+              <Row label="Layanan yang dibutuhkan" value={SERVICE_LABEL[reg.requested_service ?? ""] ?? reg.requested_service ?? "-"} />
+              <Row label="WhatsApp orang tua" value={reg.contact_whatsapp ? formatWaDisplay(reg.contact_whatsapp) : "-"} />
+              <Row label="Email" value={reg.submitter_email ?? "-"} />
+            </Section>
+          )}
 
           <Section title="A. Identitas Pasien">
             <Row label="Nama Pasien" value={reg.patient_name} />

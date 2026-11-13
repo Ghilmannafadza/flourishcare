@@ -8,6 +8,8 @@ import { fadeUp } from "@/lib/motion";
 import { useWizard } from "../wizardContext";
 import { Stepper } from "../Stepper";
 import { HOMECARE_SERVICES, type HomecareServiceKey } from "@/lib/homecarePrices";
+import { useSetting } from "@/lib/settings";
+import { isoLocal } from "@/lib/dates";
 
 type Psi = {
   id: string;
@@ -19,8 +21,6 @@ type Psi = {
 
 type Slot = { slot_time: string; is_available: boolean };
 
-const DAY_NAMES = ["S", "S", "R", "K", "J", "S", "M"]; // Sun-Sat display; kita pakai Sun-first: S M S R K J S
-const DAY_HEADERS = ["S", "S", "R", "K", "J", "S", "M"];
 // Kalender kita mulai dari Sunday: index 0..6 = Sun..Sat
 const DAY_HEADERS_SUN = ["M", "S", "S", "R", "K", "J", "S"]; // Min, Sen, Sel, Rab, Kam, Jum, Sab
 
@@ -35,10 +35,14 @@ export function StepSchedule() {
   const [monthCursor, setMonthCursor] = useState<Date>(new Date());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [offDates, setOffDates] = useState<string[]>([]);
+  // Aturan booking dari Super Admin: paling cepat (hari ini/H+1/H+2/H+3) & batas 30 hari bergulir
+  const { value: rules } = useSetting("booking");
 
   // Redirect kembali kalau step 1 belum lengkap
   useEffect(() => {
-    if (!data.parent_name || !data.child_name || !data.child_dob || !data.child_gender || !data.consultation_topic) {
+    const childOk = data.child_id || (data.parent_name && data.child_name && data.child_dob && data.child_gender);
+    if (!childOk || !data.consultation_topic) {
       navigate("/book/profile", { replace: true });
     }
   }, [data, navigate]);
@@ -92,6 +96,12 @@ export function StepSchedule() {
         .eq("mode", data.mode);
       const uniq = Array.from(new Set((rows ?? []).map((r) => r.day_of_week as number)));
       setScheduledDays(uniq);
+      const { data: off } = await supabase
+        .from("staff_time_off")
+        .select("off_date")
+        .eq("staff_id", data.psychologist_id)
+        .gte("off_date", isoLocal());
+      setOffDates(((off ?? []) as { off_date: string }[]).map((o) => o.off_date));
     })();
   }, [data.psychologist_id, data.mode]);
 
@@ -159,13 +169,20 @@ export function StepSchedule() {
     update({ scheduled_date: `${y}-${m}-${day}`, scheduled_time: "" });
   }
 
-  // Booking hanya bisa H-1 (minimal 1 hari sebelumnya). Hari ini dan hari lampau tidak bisa dipilih.
+  // Tanggal yang bisa dipilih: sesuai aturan "paling cepat booking", maksimal 30 hari ke depan,
+  // hanya hari yang ada jadwal psikolog/terapis, dan bukan tanggal libur/cuti.
+  const leadDays = rules.lead === "today" ? 0 : rules.lead === "h2" ? 2 : rules.lead === "h3" ? 3 : 1;
   function isDayClickable(d: Date): boolean {
     if (d.getMonth() !== monthCursor.getMonth()) return false;
     const minDate = new Date();
     minDate.setHours(0, 0, 0, 0);
-    minDate.setDate(minDate.getDate() + 1); // Besok
-    if (d < minDate) return false;
+    minDate.setDate(minDate.getDate() + leadDays);
+    const maxDate = new Date();
+    maxDate.setHours(0, 0, 0, 0);
+    maxDate.setDate(maxDate.getDate() + (rules.horizon_days || 30));
+    if (d < minDate || d > maxDate) return false;
+    if (data.psychologist_id && !scheduledDays.includes(d.getDay())) return false;
+    if (offDates.includes(isoLocal(d))) return false;
     return true;
   }
 
@@ -345,7 +362,10 @@ export function StepSchedule() {
               Titik = hari yang biasanya ada jadwal
             </div>
             <div className="mt-2 text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2">
-              ⏰ Booking minimal <span className="font-semibold">H-1</span> (hari ini tidak bisa dipesan).
+              ⏰ {rules.lead === "today"
+                ? <>Booking paling lambat <span className="font-semibold">1 jam</span> sebelum sesi</>
+                : <>Booking minimal <span className="font-semibold">H-{leadDays}</span></>}
+              {" "}· maksimal {rules.horizon_days || 30} hari ke depan.
             </div>
           </div>
 
@@ -411,11 +431,6 @@ export function StepSchedule() {
   );
 }
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 function buildMonthMatrix(cursor: Date): Date[] {
   // Return 42 days (6 weeks) starting from Sunday of the week containing first-of-month.

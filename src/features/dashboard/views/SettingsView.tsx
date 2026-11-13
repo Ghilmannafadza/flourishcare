@@ -5,6 +5,16 @@ import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
 import type { Branch, Profile, UserRole } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/AuthProvider";
+import { ContactSection, BookingRulesSection, VisitTariffSection, PjSection, TimeOffSection } from "./SettingsExtras";
+import { BackupSection } from "./BackupSection";
+
+export const ROLE_LABEL: Record<string, string> = {
+  super_admin: "Super Admin",
+  admin_cabang: "Admin Operasional",
+  psikolog: "Psikolog",
+  terapis: "Terapis",
+  karyawan: "Karyawan",
+};
 
 type PriceRow = { mode: string; price: number };
 
@@ -62,11 +72,29 @@ export function SettingsView() {
       {/* Harga Booking Online */}
       <PricingSection />
 
+      {/* Tarif homecare/visit: radius, transport, DP */}
+      <VisitTariffSection />
+
+      {/* Aturan booking online (paling cepat booking) */}
+      <BookingRulesSection />
+
+      {/* Kontak WhatsApp admin */}
+      <ContactSection />
+
       {/* Kelola tampilan psikolog di booking online */}
       <BookableStaffSection />
 
       {/* Jadwal Psikolog */}
       <SchedulesSection />
+
+      {/* Libur / cuti per tanggal */}
+      <TimeOffSection />
+
+      {/* Pengesahan: penanggung jawab klinik */}
+      <PjSection />
+
+      {/* Backup data bulanan */}
+      <BackupSection />
 
       {/* Cabang */}
       <section className="bg-white rounded-2xl border border-black/5 p-5">
@@ -112,7 +140,7 @@ export function SettingsView() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td className="px-4 py-3">{u.full_name}</td>
-                    <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
+                    <td className="px-4 py-3">{ROLE_LABEL[u.role] ?? u.role}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-600"}`}>
                         {u.is_active ? "Aktif" : "Nonaktif"}
@@ -224,7 +252,7 @@ function PricingSection() {
 
 function SchedulesSection() {
   const { role } = useAuth();
-  const canEdit = role === "super_admin" || role === "admin_cabang";
+  const canEdit = role === "super_admin";
   const [psis, setPsis] = useState<Psi[]>([]);
   const [selectedPsi, setSelectedPsi] = useState<string>("");
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -537,7 +565,7 @@ function CreateStaffSection({ branches, onCreated }: { branches: Branch[]; onCre
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
       setMsg({
-        text: `Akun ${email} berhasil dibuat sebagai ${staffRole}. Salin credentials di bawah dan kirim ke yang bersangkutan.`,
+        text: `Akun ${email} berhasil dibuat sebagai ${ROLE_LABEL[staffRole] ?? staffRole}. Salin credentials di bawah dan kirim ke yang bersangkutan.`,
         kind: "success",
       });
       onCreated();
@@ -554,7 +582,7 @@ function CreateStaffSection({ branches, onCreated }: { branches: Branch[]; onCre
         <UserPlus size={18} className="text-primary" /> Buat Akun Staf Klinik
       </h3>
       <p className="text-xs text-text-secondary mb-4">
-        Buat akun untuk admin cabang, psikolog, terapis, atau karyawan. Akun langsung aktif dan bisa login di{" "}
+        Akun staf hanya dibuat oleh Super Admin (tanpa pendaftaran mandiri). Kata sandi sementara wajib diganti saat login pertama. Login di{" "}
         <span className="font-mono">flourishcare.id/login</span>.
       </p>
 
@@ -628,7 +656,7 @@ function CreateStaffSection({ branches, onCreated }: { branches: Branch[]; onCre
               onChange={(e) => setStaffRole(e.target.value as UserRole)}
               className="w-full rounded-xl border border-black/10 bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <option value="admin_cabang">Admin Cabang / Klinik</option>
+              <option value="admin_cabang">Admin Operasional</option>
               <option value="psikolog">Psikolog</option>
               <option value="terapis">Terapis</option>
               <option value="karyawan">Karyawan</option>
@@ -702,6 +730,22 @@ type BookableStaff = {
   is_bookable_online: boolean;
   display_order: number | null;
   homecare_services: string[] | null;
+  bio: string | null;
+  specialties: string[] | null;
+  role_label: string | null;
+  campus: string | null;
+  education: string | null;
+  certifications: string | null;
+  experience: string | null;
+  focus: string | null;
+  instagram: string | null;
+  employment: string | null;
+  str_number: string | null;
+};
+
+type Cv = {
+  bio: string; specialties: string; role_label: string; campus: string; education: string; certifications: string;
+  experience: string; focus: string; instagram: string; employment: string; str_number: string; is_visible: boolean; display_order: string;
 };
 
 const HOMECARE_SVC_OPTIONS = [
@@ -722,6 +766,7 @@ function BookableStaffSection() {
   const [editTitle, setEditTitle] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
   const [editServices, setEditServices] = useState<string[]>([]);
+  const [cv, setCv] = useState<Cv | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -729,7 +774,7 @@ function BookableStaffSection() {
     setLoading(true);
     const { data } = await supabase
       .from("staff_profiles")
-      .select("id, title, slug, photo_url, is_visible, is_bookable_online, display_order, homecare_services")
+      .select("*")
       .order("display_order", { ascending: true });
     setStaff((data as BookableStaff[]) ?? []);
     setLoading(false);
@@ -742,6 +787,12 @@ function BookableStaffSection() {
     setEditTitle(s.title);
     setEditPhotoUrl(s.photo_url ?? "");
     setEditServices(s.homecare_services ?? []);
+    setCv({
+      bio: s.bio ?? "", specialties: (s.specialties ?? []).join(", "), role_label: s.role_label ?? "", campus: s.campus ?? "",
+      education: s.education ?? "", certifications: s.certifications ?? "", experience: s.experience ?? "", focus: s.focus ?? "",
+      instagram: s.instagram ?? "", employment: s.employment ?? "tetap", str_number: s.str_number ?? "",
+      is_visible: s.is_visible, display_order: String(s.display_order ?? ""),
+    });
   }
 
   function toggleEditService(key: string) {
@@ -784,9 +835,26 @@ function BookableStaffSection() {
         title: editTitle.trim(),
         photo_url: editPhotoUrl || null,
         homecare_services: editServices,
+        ...(cv
+          ? {
+              bio: cv.bio.trim() || null,
+              specialties: cv.specialties.split(",").map((x) => x.trim()).filter(Boolean),
+              role_label: cv.role_label.trim() || null,
+              campus: cv.campus.trim() || null,
+              education: cv.education.trim() || null,
+              certifications: cv.certifications.trim() || null,
+              experience: cv.experience.trim() || null,
+              focus: cv.focus.trim() || null,
+              instagram: cv.instagram.trim().replace(/^@/, "") || null,
+              employment: cv.employment,
+              str_number: cv.str_number.trim() || null,
+              is_visible: cv.is_visible,
+              display_order: cv.display_order ? Number(cv.display_order) : 999,
+            }
+          : {}),
       })
       .eq("id", editingId)
-      .select("id, title, photo_url, homecare_services")
+      .select("id")
       .maybeSingle();
     setEditSaving(false);
     if (error) {
@@ -939,9 +1007,9 @@ function BookableStaffSection() {
       {/* Modal Edit foto & detail psikolog */}
       {editingId && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-warm-lg">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 shadow-warm-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="font-heading font-bold text-lg">Edit Profil Psikolog</h4>
+              <h4 className="font-heading font-bold text-lg">Edit Profil Tim (halaman Tim Kami)</h4>
               <button onClick={() => setEditingId(null)} className="p-1 hover:bg-black/5 rounded-full">✕</button>
             </div>
             <div className="space-y-4">
@@ -1016,6 +1084,29 @@ function BookableStaffSection() {
                 </p>
               </div>
 
+              {cv && (
+                <div className="space-y-3 pt-3 border-t border-black/5">
+                  <p className="text-xs font-semibold text-text-secondary">Profil & CV (pop-up “Lihat profil” di halaman Tim Kami)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Peran (mis. Psikolog Anak)</span><input value={cv.role_label} onChange={(e) => setCv({ ...cv, role_label: e.target.value })} className="input" /></label>
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Lulusan (kampus)</span><input value={cv.campus} onChange={(e) => setCv({ ...cv, campus: e.target.value })} className="input" /></label>
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Instagram</span><input value={cv.instagram} onChange={(e) => setCv({ ...cv, instagram: e.target.value })} className="input" placeholder="@username" /></label>
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">No. STR / SIPP</span><input value={cv.str_number} onChange={(e) => setCv({ ...cv, str_number: e.target.value })} className="input" /></label>
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Status kerja</span>
+                      <select value={cv.employment} onChange={(e) => setCv({ ...cv, employment: e.target.value })} className="input"><option value="tetap">Tetap</option><option value="part_time">Part-time</option></select>
+                    </label>
+                    <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Urutan tampil</span><input inputMode="numeric" value={cv.display_order} onChange={(e) => setCv({ ...cv, display_order: e.target.value.replace(/\D/g, "") })} className="input" /></label>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={cv.is_visible} onChange={(e) => setCv({ ...cv, is_visible: e.target.checked })} /> Tampilkan di halaman Tim Kami</label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Bio singkat</span><textarea rows={2} value={cv.bio} onChange={(e) => setCv({ ...cv, bio: e.target.value })} className="input" /></label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Tag keahlian (pisahkan dengan koma)</span><input value={cv.specialties} onChange={(e) => setCv({ ...cv, specialties: e.target.value })} className="input" /></label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Pendidikan (satu per baris)</span><textarea rows={2} value={cv.education} onChange={(e) => setCv({ ...cv, education: e.target.value })} className="input" /></label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Sertifikasi (satu per baris)</span><textarea rows={2} value={cv.certifications} onChange={(e) => setCv({ ...cv, certifications: e.target.value })} className="input" /></label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Pengalaman (satu per baris)</span><textarea rows={2} value={cv.experience} onChange={(e) => setCv({ ...cv, experience: e.target.value })} className="input" /></label>
+                  <label className="block"><span className="block text-xs font-semibold text-text-secondary mb-1">Fokus layanan</span><textarea rows={2} value={cv.focus} onChange={(e) => setCv({ ...cv, focus: e.target.value })} className="input" /></label>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setEditingId(null)} className="rounded-full">Batal</Button>
                 <Button onClick={saveEdit} disabled={editSaving || !editTitle.trim()} className="rounded-full">
@@ -1037,6 +1128,27 @@ function UsersSection({ users, onReload }: { users: Profile[]; onReload: () => v
   const isSuperAdmin = role === "super_admin";
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [tempPw, setTempPw] = useState<{ name: string; pw: string } | null>(null);
+
+  async function manage(u: Profile, body: Record<string, unknown>) {
+    setDeletingId(u.id);
+    setMsg(null);
+    const { data, error } = await supabase.functions.invoke("manage_staff_user", { body: { user_id: u.id, ...body } });
+    setDeletingId(null);
+    const e = error?.message ?? (data as { error?: string })?.error;
+    if (e) return setMsg(`Error: ${e}`);
+    return data as { password?: string; active?: boolean };
+  }
+  async function resetPw(u: Profile) {
+    if (!confirm(`Reset kata sandi ${u.full_name}? Kata sandi sementara baru dibuat dan wajib diganti saat login.`)) return;
+    const r = await manage(u, { action: "reset_password" });
+    if (r?.password) setTempPw({ name: u.full_name, pw: r.password });
+  }
+  async function toggleActive(u: Profile) {
+    if (!confirm(`${u.is_active ? "Nonaktifkan" : "Aktifkan kembali"} akun ${u.full_name}?`)) return;
+    const r = await manage(u, { action: "set_active", active: !u.is_active });
+    if (r) onReload();
+  }
 
   async function handleDelete(u: Profile) {
     if (u.id === session?.user.id) {
@@ -1104,7 +1216,17 @@ function UsersSection({ users, onReload }: { users: Profile[]; onReload: () => v
                     </span>
                   </td>
                   {isSuperAdmin && (
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {u.id !== session?.user.id && (
+                        <>
+                          <button onClick={() => resetPw(u)} disabled={deletingId === u.id} className="text-xs px-3 py-1.5 rounded-full border border-black/10 hover:bg-black/5 mr-1">
+                            Reset sandi
+                          </button>
+                          <button onClick={() => toggleActive(u)} disabled={deletingId === u.id} className="text-xs px-3 py-1.5 rounded-full border border-black/10 hover:bg-black/5 mr-1">
+                            {u.is_active ? "Nonaktifkan" : "Aktifkan"}
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => handleDelete(u)}
                         disabled={deletingId === u.id || u.id === session?.user.id}
@@ -1128,6 +1250,12 @@ function UsersSection({ users, onReload }: { users: Profile[]; onReload: () => v
         </div>
       )}
 
+      {tempPw && (
+        <div className="mt-3 text-sm px-4 py-3 rounded-2xl border text-green-800 bg-green-50 border-green-200">
+          Kata sandi sementara untuk <b>{tempPw.name}</b>: <span className="font-mono font-semibold">{tempPw.pw}</span>
+          <p className="text-xs mt-1">Kirim ke yang bersangkutan; wajib diganti saat login berikutnya.</p>
+        </div>
+      )}
       {msg && (
         <p className={`text-xs mt-3 ${msg.startsWith("Error") ? "text-red" : "text-green-700"}`}>{msg}</p>
       )}

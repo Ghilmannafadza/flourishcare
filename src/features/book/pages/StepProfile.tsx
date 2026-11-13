@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, CheckCircle2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -12,6 +14,28 @@ export function StepProfile() {
   const { data, update } = useWizard();
   const { session } = useAuth();
   const autofilledRef = useRef(false);
+  const [checking, setChecking] = useState(false);
+  const [lamaMsg, setLamaMsg] = useState<string | null>(null);
+
+  // Pasien lama: cocokkan No. RM + nama depan anak di server (data pasien tidak ditampilkan)
+  async function cekPasienLama() {
+    setChecking(true);
+    setLamaMsg(null);
+    const { data: res, error } = await supabase.rpc("booking_find_patient", { p_rm: data.rm_lama, p_first_name: data.anak_lama });
+    setChecking(false);
+    const r = res as { ok?: boolean; child_id?: string; error?: string; until?: string } | null;
+    if (error || !r) return setLamaMsg("Gagal memeriksa data. Coba lagi atau hubungi admin.");
+    if (r.ok && r.child_id) {
+      update({ child_id: r.child_id, child_name: data.anak_lama.trim(), child_gender: data.child_gender || "L", child_dob: data.child_dob || "2000-01-01" });
+      return;
+    }
+    update({ child_id: "" });
+    setLamaMsg(
+      r.error === "locked"
+        ? "Terlalu banyak percobaan. Coba lagi 15 menit lagi atau hubungi admin."
+        : "No. RM dan nama depan belum cocok dengan data kami. Periksa kembali, atau isi data sebagai pasien baru — admin akan mencocokkan."
+    );
+  }
 
   // Bersihkan ?code= dan ?state= dari URL setelah OAuth callback selesai
   // (mencegah reload loop dan URL yang jelek)
@@ -58,6 +82,40 @@ export function StepProfile() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Pasien lama */}
+          <div className="bg-background rounded-3xl border border-black/5 p-4 space-y-3">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={data.returning}
+                onChange={(e) => update({ returning: e.target.checked, child_id: e.target.checked ? data.child_id : "" })}
+              />
+              Pasien lama FlourishCare (sudah punya No. RM)
+            </label>
+            {data.returning && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                  <Field label="No. RM">
+                    <input type="text" value={data.rm_lama} onChange={(e) => update({ rm_lama: e.target.value.toUpperCase(), child_id: "" })} placeholder="FC-RM-…" className={inputCls} />
+                  </Field>
+                  <Field label="Nama depan anak">
+                    <input type="text" value={data.anak_lama} onChange={(e) => update({ anak_lama: e.target.value, child_id: "" })} className={inputCls} />
+                  </Field>
+                  <Button type="button" variant="outline" onClick={cekPasienLama} disabled={checking || !data.rm_lama.trim() || !data.anak_lama.trim()} className="rounded-full border-2">
+                    {checking ? <Loader2 size={16} className="animate-spin" /> : "Cek data"}
+                  </Button>
+                </div>
+                {data.child_id ? (
+                  <p className="text-xs text-green-700 flex items-center gap-1">
+                    <CheckCircle2 size={14} /> Data pasien {data.rm_lama} ditemukan. Data anak & orang tua diambil otomatis dari rekam medis.
+                  </p>
+                ) : lamaMsg ? (
+                  <p className="text-xs text-red bg-red/5 border border-red/10 rounded-xl px-3 py-2">{lamaMsg}</p>
+                ) : null}
+              </>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Informasi Orang Tua */}
             <div className="space-y-4">
@@ -66,7 +124,7 @@ export function StepProfile() {
               <Field label="Nama Lengkap Orang Tua/Wali">
                 <input
                   type="text"
-                  required
+                  required={!data.child_id}
                   value={data.parent_name}
                   onChange={(e) => update({ parent_name: e.target.value })}
                   className={inputCls}
@@ -77,7 +135,7 @@ export function StepProfile() {
                 <input
                   type="tel"
                   inputMode="numeric"
-                  required
+                  required={!data.child_id}
                   value={data.parent_whatsapp}
                   onChange={(e) => update({ parent_whatsapp: e.target.value })}
                   placeholder="Contoh: 081234567890"
@@ -100,13 +158,13 @@ export function StepProfile() {
             </div>
 
             {/* Informasi Anak */}
-            <div className="space-y-4">
+            <div className={`space-y-4 ${data.child_id ? "hidden" : ""}`}>
               <p className="text-primary font-semibold text-xs uppercase tracking-wider">Informasi Anak</p>
 
               <Field label="Nama Anak">
                 <input
                   type="text"
-                  required
+                  required={!data.child_id}
                   value={data.child_name}
                   onChange={(e) => update({ child_name: e.target.value })}
                   className={inputCls}
@@ -116,7 +174,7 @@ export function StepProfile() {
               <Field label="Tanggal Lahir Anak">
                 <input
                   type="date"
-                  required
+                  required={!data.child_id}
                   value={data.child_dob}
                   onChange={(e) => update({ child_dob: e.target.value })}
                   className={inputCls}
@@ -175,7 +233,7 @@ export function StepProfile() {
           <Button
             type="submit"
             size="lg"
-            disabled={!data.child_gender}
+            disabled={!data.child_id && !data.child_gender}
             className="w-full rounded-full shadow-warm"
           >
             Lanjut Pilih Jadwal

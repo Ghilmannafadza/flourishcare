@@ -1,4 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { dmyToIso, isoLocal, maskDmy } from "@/lib/dates";
+import { toWaNumber } from "@/lib/wa";
+
+// Pilihan layanan formulir pendaftaran (serah-terima PM)
+const REG_SERVICES: Array<[string, string]> = [
+  ["TERAPI", "Terapi di klinik (SI / TW / OT / BT)"],
+  ["KONSUL", "Assessment/Konsultasi Psikolog On-Site"],
+  ["PSIKOTES", "Psikotes"],
+];
+const DRAFT_KEY = "fc_draft_daftar";
 import { useNavigate } from "react-router-dom";
 import { Plus, Trash2, ChevronLeft, ChevronRight, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,6 +66,9 @@ type FormData = {
   siblings: Sibling[];
 
   submitter_email: string;
+  requested_service: string;
+  contact_whatsapp: string;
+  consent: boolean;
 };
 
 const DEFAULT: FormData = {
@@ -71,16 +84,60 @@ const DEFAULT: FormData = {
   mother_marriage_age: "", mother_education: "",
   siblings: [],
   submitter_email: "",
+  requested_service: "",
+  contact_whatsapp: "",
+  consent: false,
 };
 
 export function AssessmentForm() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [data, setData] = useState<FormData>({
-    ...DEFAULT,
-    submitter_email: session?.user.email ?? "",
+  const [data, setData] = useState<FormData>(() => {
+    // Isian tersimpan otomatis di perangkat dan dipulihkan bila halaman tertutup (maks. 7 hari)
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as { t: number; v: FormData };
+        if (Date.now() - d.t < 7 * 864e5) return { ...DEFAULT, ...d.v, consent: false };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { ...DEFAULT, submitter_email: session?.user.email ?? "" };
   });
+  const [restored] = useState(() => {
+    try {
+      return !!localStorage.getItem(DRAFT_KEY);
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ t: Date.now(), v: data }));
+      } catch {
+        /* ignore */
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [data]);
+
+  // Validasi tanggal dd/mm/yyyy (tidak boleh di masa depan)
+  function dateErr(label: string, v: string, required: boolean): string | null {
+    if (!v.trim()) return required ? `${label} wajib diisi (format dd/mm/yyyy).` : null;
+    const iso = dmyToIso(v);
+    if (!iso) return `${label}: tanggal belum valid. Gunakan format dd/mm/yyyy.`;
+    if (iso > isoLocal()) return `${label}: tanggal tidak boleh di masa depan.`;
+    return null;
+  }
+  const step1Err =
+    (!data.requested_service && "Pilih layanan yang dibutuhkan.") ||
+    dateErr("Tanggal lahir pasien", data.date_of_birth, true) ||
+    (toWaNumber(data.contact_whatsapp).length < 10 ? "Nomor WhatsApp orang tua wajib diisi." : null);
+  const step2Err = (!data.mother_name.trim() && "Nama ibu wajib diisi.") || dateErr("Tanggal lahir ayah", data.father_dob, false) || dateErr("Tanggal lahir ibu", data.mother_dob, false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,14 +164,21 @@ export function AssessmentForm() {
     // Cegah bug: tekan Enter di input step 1/2 memicu submit form.
     if (step !== 3) return;
     setError(null);
+    if (!data.consent) {
+      setError("Centang pernyataan persetujuan terlebih dahulu.");
+      return;
+    }
     setSubmitting(true);
     try {
       const { error: err } = await supabase.from("patient_registrations").insert({
         submitter_email: data.submitter_email || null,
+        requested_service: data.requested_service || null,
+        contact_whatsapp: toWaNumber(data.contact_whatsapp) || null,
+        source: "web",
         submitter_user_id: session?.user.id ?? null,
         patient_name: data.patient_name,
         place_of_birth: data.place_of_birth || null,
-        date_of_birth: data.date_of_birth || null,
+        date_of_birth: dmyToIso(data.date_of_birth),
         gender: data.gender || "L",
         religion: data.religion || null,
         ethnicity: data.ethnicity || null,
@@ -129,7 +193,7 @@ export function AssessmentForm() {
         child_status: data.child_status || null,
         father_name: data.father_name || null,
         father_pob: data.father_pob || null,
-        father_dob: data.father_dob || null,
+        father_dob: dmyToIso(data.father_dob),
         father_religion: data.father_religion || null,
         father_address: data.father_address || null,
         father_occupation: data.father_occupation || null,
@@ -138,7 +202,7 @@ export function AssessmentForm() {
         father_education: data.father_education || null,
         mother_name: data.mother_name || null,
         mother_pob: data.mother_pob || null,
-        mother_dob: data.mother_dob || null,
+        mother_dob: dmyToIso(data.mother_dob),
         mother_religion: data.mother_religion || null,
         mother_address: data.mother_address || null,
         mother_occupation: data.mother_occupation || null,
@@ -149,6 +213,11 @@ export function AssessmentForm() {
         status: "pending_rm",
       });
       if (err) throw err;
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
       navigate("/success");
     } catch (e) {
       setError((e as Error).message ?? "Gagal submit form.");
@@ -172,8 +241,23 @@ export function AssessmentForm() {
           <>
             <h2 className="text-xl font-heading font-bold mb-1 uppercase tracking-wider text-primary">A. Identitas Pasien</h2>
             <p className="text-xs text-text-secondary mb-6">Data anak/pasien yang akan mendapatkan layanan</p>
+            {restored && (
+              <p className="text-xs text-text-secondary bg-background rounded-xl px-3 py-2 mb-4">Isian sebelumnya dipulihkan dari perangkat ini.</p>
+            )}
 
             <div className="space-y-4">
+              <Field label="Layanan yang dibutuhkan" required>
+                <div className="grid grid-cols-1 gap-2">
+                  {REG_SERVICES.map(([k, l]) => (
+                    <button key={k} type="button" onClick={() => set("requested_service", k)}
+                      className={`text-left rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                        data.requested_service === k ? "bg-primary/10 border-primary text-primary" : "bg-white border-black/10 hover:border-primary/40"
+                      }`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </Field>
               <Field label="Nama Pasien" required>
                 <input type="text" required value={data.patient_name} onChange={(e) => set("patient_name", e.target.value)} className={inputCls} />
               </Field>
@@ -181,8 +265,8 @@ export function AssessmentForm() {
                 <Field label="Tempat Lahir" required>
                   <input type="text" required value={data.place_of_birth} onChange={(e) => set("place_of_birth", e.target.value)} className={inputCls} />
                 </Field>
-                <Field label="Tanggal Lahir" required>
-                  <input type="date" required value={data.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} className={inputCls} />
+                <Field label="Tanggal Lahir (dd/mm/yyyy)" required>
+                  <input type="text" inputMode="numeric" required placeholder="dd/mm/yyyy" value={data.date_of_birth} onChange={(e) => set("date_of_birth", maskDmy(e.target.value))} className={inputCls} />
                 </Field>
               </div>
               <Field label="Jenis Kelamin" required>
@@ -237,9 +321,14 @@ export function AssessmentForm() {
                 </Field>
               </div>
 
-              <Field label="Email Anda (untuk kontak lanjutan)" required>
-                <input type="email" required value={data.submitter_email} onChange={(e) => set("submitter_email", e.target.value)} placeholder="nama@email.com" className={inputCls} />
-              </Field>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="No. WhatsApp orang tua" required>
+                  <input type="tel" inputMode="tel" required value={data.contact_whatsapp} onChange={(e) => set("contact_whatsapp", e.target.value)} placeholder="08xx" className={inputCls} />
+                </Field>
+                <Field label="Email (opsional)">
+                  <input type="email" value={data.submitter_email} onChange={(e) => set("submitter_email", e.target.value)} placeholder="nama@email.com" className={inputCls} />
+                </Field>
+              </div>
             </div>
           </>
         )}
@@ -317,6 +406,15 @@ export function AssessmentForm() {
           </>
         )}
 
+        {step === 3 && (
+          <label className="mt-6 flex items-start gap-2 text-sm text-text-secondary">
+            <input type="checkbox" checked={data.consent} onChange={(e) => set("consent", e.target.checked)} className="mt-1" />
+            Saya menyatakan data di atas benar dan setuju data ini digunakan FlourishCare untuk keperluan layanan.
+          </label>
+        )}
+        {step < 3 && (step === 1 ? step1Err : step2Err) && (
+          <p className="mt-6 text-xs text-text-secondary">{step === 1 ? step1Err : step2Err}</p>
+        )}
         {error && (
           <div className="mt-6 text-sm text-red bg-red/10 border border-red/20 rounded-2xl px-4 py-3">{error}</div>
         )}
@@ -334,7 +432,10 @@ export function AssessmentForm() {
               type="button"
               onClick={() => setStep((step + 1) as 1 | 2 | 3)}
               className="rounded-full shadow-warm"
-              disabled={step === 1 && (!data.patient_name || !data.gender || !data.child_status || !data.chief_complaint || !data.submitter_email)}
+              disabled={
+                (step === 1 && (!data.patient_name || !data.gender || !data.child_status || !data.chief_complaint || !!step1Err)) ||
+                (step === 2 && !!step2Err)
+              }
             >
               Lanjut <ChevronRight size={16} className="ml-1" />
             </Button>
@@ -384,9 +485,9 @@ function ParentColumn({
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-primary">{title}</p>
-      <Field label="Nama" required><input type="text" required value={data[g("name")] as string} onChange={(e) => set(g("name") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>
+      <Field label="Nama" required={prefix === "mother"}><input type="text" required={prefix === "mother"} value={data[g("name")] as string} onChange={(e) => set(g("name") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>
       <Field label="Tempat Lahir"><input type="text" value={data[g("pob")] as string} onChange={(e) => set(g("pob") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>
-      <Field label="Tanggal Lahir"><input type="date" value={data[g("dob")] as string} onChange={(e) => set(g("dob") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>
+      <Field label="Tanggal Lahir (dd/mm/yyyy)"><input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={data[g("dob")] as string} onChange={(e) => set(g("dob") as keyof FormData, maskDmy(e.target.value) as never)} className={inputCls} /></Field>
       <Field label="Agama"><input type="text" value={data[g("religion")] as string} onChange={(e) => set(g("religion") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>
       <Field label="Alamat"><textarea rows={2} value={data[g("address")] as string} onChange={(e) => set(g("address") as keyof FormData, e.target.value as never)} className={textareaCls} /></Field>
       <Field label="Pekerjaan"><input type="text" value={data[g("occupation")] as string} onChange={(e) => set(g("occupation") as keyof FormData, e.target.value as never)} className={inputCls} /></Field>

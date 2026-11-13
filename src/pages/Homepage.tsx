@@ -239,6 +239,7 @@ export function Homepage() {
         <div className="blob blob-sage w-[300px] h-[300px] top-1/3 left-1/2 -translate-x-1/2" />
 
         <div className="relative z-10 max-w-4xl mx-auto text-center">
+          <p className="text-primary font-semibold text-sm mb-3 tracking-wider uppercase">Layanan Tumbuh Kembang Anak · Jakarta Timur</p>
           <motion.h1
             className="text-4xl sm:text-5xl lg:text-6xl font-heading font-extrabold text-text-primary leading-[1.05] mb-6"
             initial={{ opacity: 0, y: 20 }}

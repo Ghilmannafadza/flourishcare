@@ -109,3 +109,18 @@
   .blob { animation: none; }
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* Cetak / simpan PDF dokumen laporan: hanya area dokumen yang tercetak
+   (kelas dipasang otomatis oleh printWithTitle). Tidak memengaruhi tampilan layar. */
+@media print {
+  body.fc-print-doc * { visibility: hidden !important; }
+  body.fc-print-doc .fc-print-area,
+  body.fc-print-doc .fc-print-area * { visibility: visible !important; }
+  body.fc-print-doc *:has(.fc-print-area) {
+    position: static !important; overflow: visible !important; max-height: none !important;
+    height: auto !important; transform: none !important; box-shadow: none !important;
+  }
+  body.fc-print-doc .fc-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+  body.fc-print-doc .print\:hidden { display: none !important; }
+  @page { size: A4; margin: 14mm; }
+}

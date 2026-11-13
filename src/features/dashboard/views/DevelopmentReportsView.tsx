@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { LineChart, Loader2, Printer, Plus, Eye, X, Check, Pencil } from "lucide-react";
+import { LineChart, Printer, Plus, Eye, X, Pencil, Copy } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
 import { useAuth } from "@/providers/AuthProvider";
 import { printWithTitle, isoDate } from "@/lib/print";
+import { LifecycleActions, StatusBadge } from "@/features/reports/ReportLifecycle";
+import { ReportModal, SaveBar } from "@/features/reports/PatientReportShell";
+import { SessionDocument } from "@/features/reports/ReportDocuments";
+import { DraftBanner, clearDraft, useAutosave } from "@/features/reports/autosave";
+import { substituteFor, takePrefill, type AnyReport } from "@/features/reports/reportKinds";
 
-type Child = { id: string; rm_number: string; full_name: string };
+type Child = { id: string; rm_number: string; full_name: string; dob: string; gender: "L" | "P" };
 
 type Activity = { activity: string; duration: string; assistance: string; response: string };
 
@@ -24,7 +29,24 @@ type Report = {
   home_program: string | null;
   notes: string | null;
   created_at: string;
+  // siklus laporan (migrasi 0009)
+  therapist_id: string;
+  therapy_type: string | null;
+  status: "draft" | "terbit";
+  deleted_at: string | null;
+  edited_after_publish_at: string | null;
+  withdrawn_at: string | null;
+  published_at: string | null;
+  history: AnyReport["history"];
+  substitute_for: string | null;
 };
+
+const THERAPY_TYPES = [
+  { v: "BT", l: "Behaviour Therapy (BT)" },
+  { v: "SI", l: "Sensory Integration (SI)" },
+  { v: "OT", l: "Occupational Therapy (OT)" },
+  { v: "TW", l: "Speech Therapy (TW)" },
+];
 
 const MOOD_OPTS: Array<{ v: NonNullable<Report["mood"]>; l: string }> = [
   { v: "baik", l: "Baik" },
@@ -48,7 +70,8 @@ const OBSTACLES = [
 ];
 
 export function DevelopmentReportsView() {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
+  const canWrite = role === "terapis" || role === "psikolog" || role === "super_admin";
   const [children, setChildren] = useState<Child[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
@@ -62,13 +85,19 @@ export function DevelopmentReportsView() {
       setLoading(true);
       const { data: kids } = await supabase
         .from("children")
-        .select("id, rm_number, full_name")
+        .select("id, rm_number, full_name, dob, gender")
         .not("rm_number", "is", null)
         .order("full_name");
-      setChildren(kids ?? []);
+      setChildren((kids as Child[]) ?? []);
+      const pre = takePrefill();
+      if (pre && (kids ?? []).some((k: { id: string }) => k.id === pre.child_id)) {
+        setSelectedChild(pre.child_id);
+        setFormOpen(true);
+      }
       const { data: rpts } = await supabase
         .from("development_reports")
         .select("*")
+        .is("deleted_at", null)
         .order("therapy_date", { ascending: false });
       setReports((rpts as Report[]) ?? []);
       setLoading(false);
@@ -76,10 +105,17 @@ export function DevelopmentReportsView() {
   }, []);
 
   const child = useMemo(() => children.find((c) => c.id === selectedChild) ?? null, [children, selectedChild]);
-  const childReports = useMemo(() => reports.filter((r) => r.child_id === selectedChild), [reports, selectedChild]);
+  // Draft milik orang lain tidak ditampilkan (kecuali Super Admin)
+  const childReports = useMemo(
+    () =>
+      reports.filter(
+        (r) => r.child_id === selectedChild && (r.status === "terbit" || role === "super_admin" || r.therapist_id === profile?.id)
+      ),
+    [reports, selectedChild, role, profile?.id]
+  );
 
   async function refresh() {
-    const { data } = await supabase.from("development_reports").select("*").order("therapy_date", { ascending: false });
+    const { data } = await supabase.from("development_reports").select("*").is("deleted_at", null).order("therapy_date", { ascending: false });
     setReports((data as Report[]) ?? []);
   }
 
@@ -124,9 +160,11 @@ export function DevelopmentReportsView() {
                 <h2 className="font-heading font-extrabold text-xl">{child.full_name}</h2>
                 <p className="text-xs text-text-secondary">RM {child.rm_number} · FRM-008 Laporan Perkembangan</p>
               </div>
-              <Button size="sm" className="rounded-full" onClick={() => setFormOpen(true)}>
-                <Plus size={16} className="mr-1" /> Laporan Baru
-              </Button>
+              {canWrite && (
+                <Button size="sm" className="rounded-full" onClick={() => setFormOpen(true)}>
+                  <Plus size={16} className="mr-1" /> Laporan Baru
+                </Button>
+              )}
             </div>
 
             {childReports.length === 0 ? (
@@ -134,24 +172,30 @@ export function DevelopmentReportsView() {
             ) : (
               <ul className="space-y-2">
                 {childReports.map((r) => (
-                  <li key={r.id} className="border border-black/5 rounded-xl p-3 flex items-center justify-between">
+                  <li key={r.id} className="border border-black/5 rounded-xl p-3">
+                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
+                      <div className="mb-1"><StatusBadge row={r as unknown as AnyReport} /></div>
                       <p className="font-semibold text-sm">
                         Sesi {r.session_number ?? "-"}
                         {r.total_sessions ? `/${r.total_sessions}` : ""} · {new Date(r.therapy_date).toLocaleDateString("id-ID")}
                       </p>
                       <p className="text-xs text-text-secondary">
-                        Terapis: {r.therapist_name} · Mood: {r.mood ?? "-"} · Energi: {r.energy ?? "-"}
+                        {r.therapy_type ? `${r.therapy_type} · ` : ""}Terapis: {r.therapist_name} · Mood: {r.mood ?? "-"} · Energi: {r.energy ?? "-"}
                       </p>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="rounded-full" onClick={() => setDetail(r)}>
                         <Eye size={14} className="mr-1" /> Detail
                       </Button>
-                      <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditReport(r)}>
-                        <Pencil size={14} className="mr-1" /> Edit
-                      </Button>
+                      {(r.therapist_id === profile?.id || role === "super_admin") && (
+                        <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditReport(r)}>
+                          <Pencil size={14} className="mr-1" /> Edit
+                        </Button>
+                      )}
                     </div>
+                   </div>
+                   <LifecycleActions kind="sesi" row={r as unknown as AnyReport} onChanged={refresh} />
                   </li>
                 ))}
               </ul>
@@ -164,6 +208,7 @@ export function DevelopmentReportsView() {
             child={child}
             defaultTherapist={profile?.full_name ?? ""}
             therapistId={profile?.id ?? ""}
+            lastReport={childReports[0]}
             onClose={() => setFormOpen(false)}
             onSaved={() => {
               setFormOpen(false);
@@ -195,6 +240,7 @@ function ReportForm({
   defaultTherapist,
   therapistId,
   initialReport,
+  lastReport,
   onClose,
   onSaved,
 }: {
@@ -202,6 +248,7 @@ function ReportForm({
   defaultTherapist: string;
   therapistId: string;
   initialReport?: Report;
+  lastReport?: Report;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -227,13 +274,33 @@ function ReportForm({
   const [obstacles, setObstacles] = useState<string[]>(initialReport?.obstacles ?? []);
   const [homeProgram, setHomeProgram] = useState(initialReport?.home_program ?? "");
   const [notes, setNotes] = useState(initialReport?.notes ?? "");
+  const [therapyType, setTherapyType] = useState<string>(initialReport?.therapy_type ?? lastReport?.therapy_type ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  // Simpan otomatis di perangkat (tawaran Pulihkan / Buang saat dibuka lagi)
+  const draftKey = `sesi_${child.id}_${initialReport?.id ?? "new"}`;
+  const snapshot = { therapyDate, sessionNumber, totalSessions, therapistName, mood, energy, activities, obstacles, homeProgram, notes, therapyType };
+  useAutosave(draftKey, snapshot);
+  function restore(v: typeof snapshot) {
+    setTherapyDate(v.therapyDate); setSessionNumber(v.sessionNumber); setTotalSessions(v.totalSessions);
+    setTherapistName(v.therapistName); setMood(v.mood); setEnergy(v.energy); setActivities(v.activities);
+    setObstacles(v.obstacles); setHomeProgram(v.homeProgram); setNotes(v.notes); setTherapyType(v.therapyType);
+  }
+  // "Salin dari sesi lalu": aktivitas, program rumah, jenis terapi, nomor sesi berikutnya
+  function copyFromLast() {
+    if (!lastReport) return;
+    setActivities((lastReport.activities ?? []).map((a) => ({ ...a, response: "" })));
+    setHomeProgram(lastReport.home_program ?? "");
+    setTherapyType(lastReport.therapy_type ?? "");
+    setTotalSessions(String(lastReport.total_sessions ?? "12"));
+    if (lastReport.session_number) setSessionNumber(String(Number(lastReport.session_number) + 1));
+  }
 
   function toggleObstacle(o: string) {
     setObstacles((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
   }
 
-  async function submit() {
+  async function submit(status: "draft" | "terbit") {
     setError(null);
     if (!therapistId) {
       setError("Profil terapis belum ter-load. Refresh halaman lalu coba lagi.");
@@ -244,8 +311,9 @@ function ReportForm({
     const sesTot = totalSessions ? Number(totalSessions) : 12;
     const payload = {
       child_id: child.id,
-      therapist_id: therapistId,
       therapy_date: therapyDate,
+      therapy_type: therapyType || null,
+      status,
       session_no: sesNum,
       session_number: sesNum,
       session_total: sesTot,
@@ -266,7 +334,10 @@ function ReportForm({
         .eq("id", initialReport.id);
       error = e;
     } else {
-      const { error: e } = await supabase.from("development_reports").insert(payload);
+      const sub = await substituteFor(child.id, therapyType, therapistId);
+      const { error: e } = await supabase
+        .from("development_reports")
+        .insert({ ...payload, therapist_id: therapistId, substitute_for: sub });
       error = e;
     }
     setSaving(false);
@@ -274,6 +345,7 @@ function ReportForm({
       setError(error.message);
       return;
     }
+    clearDraft(draftKey);
     onSaved();
   }
 
@@ -291,6 +363,22 @@ function ReportForm({
         </div>
 
         <div className="p-5 space-y-5">
+          <DraftBanner<typeof snapshot> storageKey={draftKey} onRestore={restore} />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <Field label="Jenis Terapi (format MDxFlourishCare-FRM-008)">
+                <select value={therapyType} onChange={(e) => setTherapyType(e.target.value)} className="input">
+                  <option value="">Pilih jenis terapi</option>
+                  {THERAPY_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+                </select>
+              </Field>
+            </div>
+            {!isEdit && lastReport && (
+              <Button type="button" variant="outline" size="sm" className="rounded-full border-2" onClick={copyFromLast}>
+                <Copy size={14} className="mr-1" /> Salin dari sesi lalu
+              </Button>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <Field label="Tanggal Terapi">
               <input type="date" value={therapyDate} onChange={(e) => setTherapyDate(e.target.value)} className="input" />
@@ -397,18 +485,9 @@ function ReportForm({
             <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
           </Field>
 
-          {error && <p className="text-sm text-red">{error}</p>}
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t p-4 flex justify-end gap-2">
-          <Button variant="outline" className="rounded-full" onClick={onClose}>
-            Batal
-          </Button>
-          <Button className="rounded-full" onClick={submit} disabled={saving}>
-            {saving ? <Loader2 className="animate-spin mr-1" size={16} /> : <Check size={16} className="mr-1" />}
-            {isEdit ? "Simpan Perubahan" : "Simpan Laporan"}
-          </Button>
-        </div>
+        <SaveBar saving={saving} error={error} onSave={submit} isEdit={isEdit} currentStatus={initialReport?.status} />
       </div>
     </div>
   );
@@ -416,105 +495,25 @@ function ReportForm({
 
 function ReportDetail({ report, child, onClose }: { report: Report; child: Child; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:static print:bg-white print:p-0">
-      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto print:max-h-none print:rounded-none print:shadow-none">
-        <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between print:hidden">
-          <h3 className="font-heading font-extrabold text-lg">Detail Laporan Perkembangan</h3>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() =>
-                printWithTitle(
-                  `FRM-008_${child?.rm_number ?? "RM"}_${(child?.full_name ?? "").replace(/\s+/g, "-")}_${isoDate(report.therapy_date)}`
-                )
-              }
-            >
-              <Printer size={14} className="mr-1" /> Cetak/PDF
-            </Button>
-            <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-lg">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 print:p-8 space-y-4 text-sm">
-          <div className="hidden print:flex items-center justify-between border-b pb-4 mb-4">
-            <img src="/mitra-diani-logo.png" alt="Mitra Diani" className="h-12" />
-            <div className="text-center">
-              <p className="font-heading font-extrabold">FLOURISH-FRM-008</p>
-              <p className="text-xs">Laporan Perkembangan</p>
-            </div>
-            <img src="/flourishcare-logo.svg" alt="FlourishCare" className="h-12" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Row k="Nama Anak" v={child.full_name} />
-            <Row k="Nomor RM" v={child.rm_number} />
-            <Row k="Tanggal Terapi" v={new Date(report.therapy_date).toLocaleDateString("id-ID")} />
-            <Row k="Sesi" v={`${report.session_number ?? "-"} / ${report.total_sessions ?? "-"}`} />
-            <Row k="Terapis" v={report.therapist_name} />
-            <Row k="Mood" v={report.mood ?? "-"} />
-            <Row k="Energi" v={report.energy ?? "-"} />
-          </div>
-
-          <section>
-            <h4 className="font-heading font-bold mb-1">Aktivitas Sesi</h4>
-            {report.activities && report.activities.length > 0 ? (
-              <table className="w-full text-xs border">
-                <thead className="bg-background">
-                  <tr>
-                    <th className="border p-2 text-left">Aktivitas</th>
-                    <th className="border p-2 text-left">Durasi</th>
-                    <th className="border p-2 text-left">Bantuan</th>
-                    <th className="border p-2 text-left">Respon</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.activities.map((a, i) => (
-                    <tr key={i}>
-                      <td className="border p-2">{a.activity}</td>
-                      <td className="border p-2">{a.duration}</td>
-                      <td className="border p-2">{a.assistance}</td>
-                      <td className="border p-2">{a.response}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="italic text-text-secondary">-</p>
-            )}
-          </section>
-
-          <section>
-            <h4 className="font-heading font-bold mb-1">Hambatan</h4>
-            <p>{report.obstacles && report.obstacles.length > 0 ? report.obstacles.map((o) => o.replace(/_/g, " ")).join(", ") : "-"}</p>
-          </section>
-
-          <section>
-            <h4 className="font-heading font-bold mb-1">Home Program</h4>
-            <p className="whitespace-pre-wrap">{report.home_program ?? "-"}</p>
-          </section>
-
-          <section>
-            <h4 className="font-heading font-bold mb-1">Catatan</h4>
-            <p className="whitespace-pre-wrap">{report.notes ?? "-"}</p>
-          </section>
-
-          <div className="pt-6 grid grid-cols-2 gap-8 print:mt-12">
-            <div className="text-center">
-              <p className="text-xs mb-16">Orang Tua/Wali</p>
-              <p className="border-t pt-1 text-xs">(_____________________)</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs mb-16">Terapis</p>
-              <p className="border-t pt-1 text-xs">({report.therapist_name})</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ReportModal
+      title="Laporan Sesi Terapi (FRM-008)"
+      subtitle={`${child.full_name} · RM ${child.rm_number}`}
+      onClose={onClose}
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-full border-2"
+          onClick={() =>
+            printWithTitle(`FRM-008_${child.rm_number}_${child.full_name.replace(/\s+/g, "-")}_${isoDate(report.therapy_date)}`)
+          }
+        >
+          <Printer size={14} className="mr-1" /> Cetak/PDF
+        </Button>
+      }
+    >
+      <SessionDocument row={report as unknown as AnyReport} child={child} />
+    </ReportModal>
   );
 }
 
@@ -537,13 +536,5 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
     >
       {children}
     </button>
-  );
-}
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div>
-      <p className="text-[11px] text-text-secondary uppercase tracking-wide">{k}</p>
-      <p className="font-semibold">{v}</p>
-    </div>
   );
 }

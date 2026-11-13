@@ -134,7 +134,8 @@ Semua dokumen spesifikasi ada di folder `docs/`:
 - `06-REST-API-Specification.md`
 - `07-Engineering-Guidelines.md`
 - `08-Code-Review-and-Remediation-Roadmap.md`
-- `09-Revisi-v1.1-Scope-Change.md` — revisi terkini
+- `09-Revisi-v1.1-Scope-Change.md` — revisi v1.1
+- `10-Implementasi-Serah-Terima-PM.md` — implementasi serah-terima prototipe PM (Nov 2026) + langkah deploy
 
 ## 🧭 Fitur Progress Layanan (Roadmap Edge Functions)
 

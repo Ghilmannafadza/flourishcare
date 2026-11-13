@@ -9,22 +9,20 @@ import type {
   StaffProfile,
 } from "@/types/database";
 
-export async function fetchDashboardKpis(branchId: string | null) {
+export async function fetchDashboardKpis(_branchId: string | null) {
   const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
 
+  // Sumber data nyata: booking online/homecare (online_bookings + online_payments)
   const [patientsCount, sessionsToday, paymentsMonth] = await Promise.all([
     supabase.from("children").select("id", { count: "exact", head: true }).is("deleted_at", null),
     supabase
-      .from("sessions")
+      .from("online_bookings")
       .select("id", { count: "exact", head: true })
+      .in("status", ["confirmed", "awaiting_confirmation", "completed"])
       .gte("scheduled_at", startOfDayIso(today))
       .lt("scheduled_at", endOfDayIso(today)),
-    supabase
-      .from("payments")
-      .select("amount")
-      .eq("status", "paid")
-      .gte("paid_at", startOfMonth),
+    supabase.from("online_payments").select("amount").eq("status", "paid").gte("paid_at", startOfMonth),
   ]);
 
   const revenue = (paymentsMonth.data ?? []).reduce(
@@ -49,17 +47,19 @@ export async function fetchRecentBookings(limit = 20) {
   return (data ?? []) as Booking[];
 }
 
-export async function fetchUpcomingSessions(staffId?: string, limit = 20) {
-  let q = supabase
-    .from("sessions")
-    .select("*")
+export type UpcomingSession = SessionRow & { code?: string; child_name?: string; mode?: string };
+
+/** Jadwal terdekat dari booking online/homecare yang aktif. */
+export async function fetchUpcomingSessions(_staffProfileId?: string, limit = 20) {
+  const { data, error } = await supabase
+    .from("online_bookings")
+    .select("id, code, child_name, mode, scheduled_at, duration_min, status, psychologist_id")
     .gte("scheduled_at", new Date().toISOString())
+    .in("status", ["confirmed", "awaiting_confirmation"])
     .order("scheduled_at", { ascending: true })
     .limit(limit);
-  if (staffId) q = q.eq("therapist_id", staffId);
-  const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as SessionRow[];
+  return (data ?? []) as unknown as UpcomingSession[];
 }
 
 /**

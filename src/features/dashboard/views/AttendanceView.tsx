@@ -3,7 +3,7 @@ import { Fingerprint, LogIn as LogInIcon, LogOut as LogOutIcon, CalendarPlus, Lo
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
-import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
+import { EmptyState } from "@/features/dashboard/common";
 import { fetchLeaveRequests } from "@/features/dashboard/queries";
 import type { LeaveRequest } from "@/types/database";
 

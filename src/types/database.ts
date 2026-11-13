@@ -54,6 +54,7 @@ export interface Profile {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  must_change_password?: boolean;
 }
 
 export interface Branch {
@@ -82,6 +83,17 @@ export interface StaffProfile {
   display_order: number;
   created_at: string;
   updated_at: string;
+  // Profil tim / CV (migrasi 0009)
+  is_bookable_online?: boolean;
+  homecare_services?: string[] | null;
+  role_label?: string | null;
+  campus?: string | null;
+  education?: string | null;
+  certifications?: string | null;
+  experience?: string | null;
+  focus?: string | null;
+  instagram?: string | null;
+  employment?: string | null;
 }
 
 export interface Child {

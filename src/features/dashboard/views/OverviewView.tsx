@@ -2,14 +2,17 @@ import { useEffect, useState } from "react";
 import { Users, CalendarClock, Wallet, Activity } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { fetchDashboardKpis, fetchUpcomingSessions, formatRupiah } from "@/features/dashboard/queries";
-import type { SessionRow } from "@/types/database";
+import type { UpcomingSession } from "@/features/dashboard/queries";
 import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
+import { TodayPanel } from "./TodayPanel";
+import { BackupNotice } from "./BackupSection";
+import type { ReportKind } from "@/features/reports/reportKinds";
 
-export function OverviewView() {
+export function OverviewView({ onWrite, onBackup }: { onWrite?: (kind: ReportKind) => void; onBackup?: () => void } = {}) {
   const { profile, role } = useAuth();
   const canSeeRevenue = role === "super_admin" || role === "admin_cabang";
   const [kpi, setKpi] = useState<{ patients: number; sessionsToday: number; revenueThisMonth: number } | null>(null);
-  const [upcoming, setUpcoming] = useState<SessionRow[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,8 +48,11 @@ export function OverviewView() {
     { icon: Activity, label: "Status", value: loading ? "Memuat…" : "Aktif" },
   ];
 
+  const isClinical = role === "psikolog" || role === "terapis";
+
   return (
     <div className="space-y-6">
+      {role === "super_admin" && <BackupNotice onOpen={onBackup} />}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((c) => (
           <div key={c.label} className="bg-white rounded-2xl p-5 border border-primary/10">
@@ -59,6 +65,9 @@ export function OverviewView() {
         ))}
       </div>
 
+      {isClinical && onWrite && <TodayPanel onWrite={onWrite} />}
+
+      {!isClinical && (
       <section>
         <h2 className="font-heading font-bold text-lg mb-3">Jadwal Terdekat</h2>
         {loading ? (
@@ -70,7 +79,7 @@ export function OverviewView() {
             {upcoming.map((s) => (
               <div key={s.id} className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold">Sesi #{s.id.slice(0, 6)}</p>
+                  <p className="text-sm font-semibold">{s.child_name ?? "Sesi"} <span className="text-xs font-mono text-text-secondary">{s.code}</span></p>
                   <p className="text-xs text-text-secondary">
                     {new Date(s.scheduled_at).toLocaleString("id-ID", {
                       weekday: "long",
@@ -81,12 +90,13 @@ export function OverviewView() {
                     })}
                   </p>
                 </div>
-                <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{s.status}</span>
+                <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{s.status.replace(/_/g, " ")}</span>
               </div>
             ))}
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

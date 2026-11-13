@@ -2,8 +2,8 @@
 --
 -- CARA:
 -- 1. Supabase Dashboard → Authentication → Users → "Add user" → "Create new user"
---    a) adit@flourishcare.id  | password: admin123  | Auto confirm: ON
---    b) achla@flourishcare.id | password: admin321  | Auto confirm: ON
+--    a) adit@flourishcare.id  | password: (buat sandi kuat, jangan ditulis di repo) | Auto confirm: ON
+--    b) achla@flourishcare.id | password: (buat sandi kuat, jangan ditulis di repo) | Auto confirm: ON
 --
 -- 2. Buka SQL Editor lalu jalankan script ini apa adanya.
 --    Script akan otomatis mencocokkan email → auth.users.id, membuat baris

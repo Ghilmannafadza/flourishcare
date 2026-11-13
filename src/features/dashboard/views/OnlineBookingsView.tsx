@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Video, Home, Phone, Loader2, Link2, Check, X, Pencil, ExternalLink } from "lucide-react";
+import { Video, Home, Phone, Loader2, Link2, Check, X, Pencil, ExternalLink, CalendarClock, Trash2, Search } from "lucide-react";
+import { BookingMoneyPanel, RescheduleModal, type BookingMoney, type PaymentRow } from "./BookingAdminPanels";
 import { supabase } from "@/lib/supabase";
 import { EmptyState, LoadingBlock } from "@/features/dashboard/common";
 import { formatRupiah } from "@/features/dashboard/queries";
@@ -24,7 +25,7 @@ type Row = {
   meeting_url: string | null;
   created_at: string;
   psychologist_name?: string | null;
-};
+} & BookingMoney;
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   pending_payment: { text: "Menunggu Bayar", cls: "bg-yellow/10 text-yellow-700" },
@@ -45,9 +46,16 @@ export function OnlineBookingsView() {
   const [linkDraft, setLinkDraft] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkErr, setLinkErr] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [staff, setStaff] = useState<Array<{ id: string; title: string }>>([]);
+  const [resched, setResched] = useState<Row | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [q, setQ] = useState("");
 
   async function load() {
     setLoading(true);
+    // Booking online yang lewat batas bayar 10 menit otomatis kedaluwarsa
+    await supabase.rpc("expire_unpaid_bookings");
     const { data } = await supabase
       .from("online_bookings")
       .select("*, staff_profiles!online_bookings_psychologist_id_fkey(title)")
@@ -58,7 +66,30 @@ export function OnlineBookingsView() {
       return { ...r, psychologist_name: sp?.title ?? null };
     });
     setRows(rows as Row[]);
+    const ids = (rows as Row[]).map((r) => r.id);
+    const [pay, st] = await Promise.all([
+      ids.length ? supabase.from("online_payments").select("*").in("booking_id", ids).order("created_at") : Promise.resolve({ data: [] }),
+      supabase.from("staff_profiles").select("id,title").order("display_order"),
+    ]);
+    setPayments((pay.data as PaymentRow[]) ?? []);
+    setStaff((st.data as Array<{ id: string; title: string }>) ?? []);
     setLoading(false);
+  }
+
+  async function complete(id: string) {
+    setUpdating(id);
+    await supabase.from("online_bookings").update({ status: "completed" }).eq("id", id);
+    setUpdating(null);
+    void load();
+  }
+
+  async function remove(b: Row) {
+    if (!confirm(`Hapus booking ${b.code} (${b.child_name})? Riwayat pembayarannya ikut terhapus. Tidak bisa dibatalkan.`)) return;
+    setUpdating(b.id);
+    const { error } = await supabase.from("online_bookings").delete().eq("id", b.id);
+    setUpdating(null);
+    if (error) alert("Gagal hapus: " + error.message);
+    void load();
   }
 
   useEffect(() => {
@@ -73,6 +104,7 @@ export function OnlineBookingsView() {
   }
 
   async function cancel(id: string) {
+    if (!confirm("Batalkan booking ini?")) return;
     setUpdating(id);
     await supabase
       .from("online_bookings")
@@ -119,9 +151,30 @@ export function OnlineBookingsView() {
       />
     );
 
+  const visibleRows = rows.filter((b) => {
+    if (statusFilter === "active" && ["cancelled", "expired", "completed"].includes(b.status)) return false;
+    if (statusFilter !== "active" && statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (q.trim()) {
+      const s = q.toLowerCase();
+      return [b.code, b.child_name, b.parent_name, b.parent_whatsapp].some((x) => String(x ?? "").toLowerCase().includes(s));
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-3">
-      {rows.map((b) => {
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative max-w-xs flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari kode, anak, orang tua, WA" className="input pl-8" />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input max-w-[220px]">
+          <option value="active">Aktif (belum selesai)</option>
+          <option value="all">Semua</option>
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v.text}</option>)}
+        </select>
+      </div>
+      {visibleRows.map((b) => {
         const st = STATUS_LABEL[b.status] ?? { text: b.status, cls: "bg-gray-100 text-gray-600" };
         const isPaid = ["confirmed", "awaiting_confirmation", "completed"].includes(b.status);
         return (
@@ -287,7 +340,27 @@ export function OnlineBookingsView() {
               </div>
             )}
 
-            {b.status === "awaiting_confirmation" && (
+            {canEditLink && <BookingMoneyPanel b={b} payments={payments.filter((p) => p.booking_id === b.id)} canEdit={canEditLink} onChanged={load} />}
+
+            {canEditLink && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {!["cancelled", "expired", "completed"].includes(b.status) && (
+                  <button onClick={() => setResched(b)} className="text-xs px-3 py-1.5 rounded-full border border-black/10 hover:bg-black/5 inline-flex items-center gap-1">
+                    <CalendarClock size={12} /> Ubah jadwal
+                  </button>
+                )}
+                {b.status === "confirmed" && (
+                  <button onClick={() => complete(b.id)} disabled={updating === b.id} className="text-xs px-3 py-1.5 rounded-full border border-black/10 hover:bg-black/5">
+                    Tandai selesai
+                  </button>
+                )}
+                <button onClick={() => remove(b)} disabled={updating === b.id} className="text-xs px-3 py-1.5 rounded-full border border-red/30 text-red hover:bg-red/10 inline-flex items-center gap-1">
+                  <Trash2 size={12} /> Hapus booking
+                </button>
+              </div>
+            )}
+
+            {b.status === "awaiting_confirmation" && canEditLink && (
               <div className="flex gap-2 mt-4 pt-4 border-t border-black/5">
                 <button
                   onClick={() => confirm(b.id)}
@@ -309,6 +382,18 @@ export function OnlineBookingsView() {
           </div>
         );
       })}
+      {visibleRows.length === 0 && <p className="text-sm text-text-secondary text-center py-8">Tidak ada booking pada filter ini.</p>}
+      {resched && (
+        <RescheduleModal
+          b={resched}
+          staff={staff}
+          onClose={() => setResched(null)}
+          onSaved={() => {
+            setResched(null);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }

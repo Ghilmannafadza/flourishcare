@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { User2, Mail, Phone, Baby, Loader2 } from "lucide-react";
+import { User2, Mail, Phone, Baby } from "lucide-react";
 import { fetchPatientChildren, type PatientChild } from "@/features/patient/queries";
 import { useAuth } from "@/providers/AuthProvider";
 import { EmptyState, LoadingBlock } from "@/features/dashboard/common";

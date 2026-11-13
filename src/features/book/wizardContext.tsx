@@ -31,6 +31,14 @@ export type WizardData = {
   homecare_address: string;
 
   payment_type: "full" | "dp_50";
+
+  // Pasien lama (No. RM + nama depan) — data anak & orang tua diambil dari rekam medis
+  returning: boolean;
+  rm_lama: string;
+  anak_lama: string;
+  child_id: string;
+  // Homecare: jarak dari Klinik Mitra Diani (km) untuk biaya transport
+  distance_km: string;
 };
 
 const DEFAULT: WizardData = {
@@ -50,6 +58,11 @@ const DEFAULT: WizardData = {
   scheduled_time: "",
   homecare_address: "",
   payment_type: "full",
+  returning: false,
+  rm_lama: "",
+  anak_lama: "",
+  child_id: "",
+  distance_km: "",
 };
 
 type Ctx = {
