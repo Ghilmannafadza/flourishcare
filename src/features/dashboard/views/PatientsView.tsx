@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Users, Search, KeyRound, Unlock, Trash2, Loader2, ChevronDown, ChevronUp, Copy, Check, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { fetchChildren } from "@/features/dashboard/queries";
@@ -27,7 +28,8 @@ export function PatientsView() {
   const [staff, setStaff] = useState<StaffOpt[]>([]);
   const [parents, setParents] = useState<Record<string, { full_name: string; whatsapp: string }>>({});
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(params.get("q") ?? "");
   const [open, setOpen] = useState<string | null>(null);
 
   const load = useCallback(async () => {

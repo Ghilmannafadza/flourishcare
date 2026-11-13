@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Video, Home, Phone, Loader2, Link2, Check, X, Pencil, ExternalLink, CalendarClock, Trash2, Search } from "lucide-react";
 import { BookingMoneyPanel, RescheduleModal, type BookingMoney, type PaymentRow } from "./BookingAdminPanels";
 import { supabase } from "@/lib/supabase";
@@ -49,8 +50,9 @@ export function OnlineBookingsView() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [staff, setStaff] = useState<Array<{ id: string; title: string }>>([]);
   const [resched, setResched] = useState<Row | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("active");
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<string>(params.get("q") ? "all" : "active");
+  const [q, setQ] = useState(params.get("q") ?? "");
 
   async function load() {
     setLoading(true);

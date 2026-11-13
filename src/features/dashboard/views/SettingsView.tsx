@@ -41,10 +41,14 @@ type Schedule = {
 
 const DAY_LABELS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
-export function SettingsView() {
+export type SettingsPage = "tarif" | "booking" | "jadwal" | "tim" | "akun" | "kontak" | "pengesahan" | "backup";
+
+/** Pengaturan dipecah per halaman (menu produk "Pengaturan"), pola Supabase Studio. */
+export function SettingsView({ page = "tarif" }: { page?: SettingsPage }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,96 +67,57 @@ export function SettingsView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
-  if (loading) return <LoadingBlock />;
+  if (loading && (page === "akun" || page === "pengesahan")) return <LoadingBlock />;
+  const reload = () => setReloadKey((k) => k + 1);
 
   return (
     <div className="space-y-6">
-      {/* Harga Booking Online */}
-      <PricingSection />
-
-      {/* Tarif homecare/visit: radius, transport, DP */}
-      <VisitTariffSection />
-
-      {/* Aturan booking online (paling cepat booking) */}
-      <BookingRulesSection />
-
-      {/* Kontak WhatsApp admin */}
-      <ContactSection />
-
-      {/* Kelola tampilan psikolog di booking online */}
-      <BookableStaffSection />
-
-      {/* Jadwal Psikolog */}
-      <SchedulesSection />
-
-      {/* Libur / cuti per tanggal */}
-      <TimeOffSection />
-
-      {/* Pengesahan: penanggung jawab klinik */}
-      <PjSection />
-
-      {/* Backup data bulanan */}
-      <BackupSection />
-
-      {/* Cabang */}
-      <section className="bg-white rounded-2xl border border-black/5 p-5">
-        <h3 className="font-heading font-bold flex items-center gap-2 mb-4">
-          <Building2 size={18} className="text-primary" /> Cabang
-        </h3>
-        {branches.length === 0 ? (
-          <EmptyState title="Belum ada cabang" description="Jalankan seed atau tambahkan cabang melalui Supabase." icon={Building2} />
-        ) : (
-          <ul className="divide-y divide-black/5">
-            {branches.map((b) => (
-              <li key={b.id} className="py-3">
-                <p className="font-semibold">{b.name}</p>
-                <p className="text-xs text-text-secondary">{b.address}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Buat Akun Staf Baru — hanya super_admin */}
-      <CreateStaffSection branches={branches} onCreated={() => window.location.reload()} />
-
-      {/* Pengguna */}
-      <UsersSection users={users} onReload={() => window.location.reload()} />
-      <section className="hidden">
-        <h3 className="font-heading font-bold flex items-center gap-2 mb-4">
-          <UserCog size={18} className="text-primary" /> Pengguna & Role
-        </h3>
-        {users.length === 0 ? (
-          <EmptyState title="Belum ada pengguna" icon={UserCog} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-text-secondary">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Nama</th>
-                  <th className="px-4 py-2 font-medium">Role</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5">
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td className="px-4 py-3">{u.full_name}</td>
-                    <td className="px-4 py-3">{ROLE_LABEL[u.role] ?? u.role}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-600"}`}>
-                        {u.is_active ? "Aktif" : "Nonaktif"}
-                      </span>
-                    </td>
-                  </tr>
+      {page === "tarif" && (
+        <>
+          <PricingSection />
+          <VisitTariffSection />
+        </>
+      )}
+      {page === "booking" && <BookingRulesSection />}
+      {page === "jadwal" && (
+        <>
+          <SchedulesSection />
+          <TimeOffSection />
+        </>
+      )}
+      {page === "tim" && <BookableStaffSection />}
+      {page === "akun" && (
+        <>
+          <CreateStaffSection branches={branches} onCreated={reload} />
+          <UsersSection users={users} onReload={reload} />
+        </>
+      )}
+      {page === "kontak" && <ContactSection />}
+      {page === "pengesahan" && (
+        <>
+          <PjSection />
+          <section className="bg-white rounded-2xl border border-black/5 p-5">
+            <h3 className="font-heading font-bold flex items-center gap-2 mb-4">
+              <Building2 size={18} className="text-primary" /> Cabang
+            </h3>
+            {branches.length === 0 ? (
+              <EmptyState title="Belum ada cabang" description="Jalankan seed atau tambahkan cabang melalui Supabase." icon={Building2} />
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {branches.map((b) => (
+                  <li key={b.id} className="py-3">
+                    <p className="font-semibold">{b.name}</p>
+                    <p className="text-xs text-text-secondary">{b.address}</p>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+      {page === "backup" && <BackupSection />}
     </div>
   );
 }

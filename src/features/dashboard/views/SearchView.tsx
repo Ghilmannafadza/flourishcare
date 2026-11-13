@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, Users, Video, ClipboardList, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatWaDisplay, toWaNumber, waLink } from "@/lib/wa";
@@ -9,7 +10,8 @@ import { EmptyState } from "@/features/dashboard/common";
 type Hit = { type: "pasien" | "booking" | "pendaftaran"; id: string; title: string; sub: string; wa?: string | null; tag?: string };
 
 export function SearchView({ onOpen }: { onOpen?: (tab: "patients" | "online_bookings" | "registrations") => void }) {
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(params.get("q") ?? "");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
 
