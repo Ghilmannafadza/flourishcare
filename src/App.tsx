@@ -12,11 +12,13 @@ import { PatientPortal } from "./pages/PatientPortal";
 import { NotFound } from "./pages/NotFound";
 import { AuthProvider } from "./providers/AuthProvider";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { Seo } from "./components/Seo";
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <Seo />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Homepage />} />

@@ -1,3 +1,4 @@
+import { Seo } from "./components/Seo";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./providers/AuthProvider";
 import { AssessmentLayout } from "./features/assessment/AssessmentLayout";
@@ -9,6 +10,7 @@ export default function AssessmentApp({ basename = "/assessment" }: { basename?:
   return (
     <AuthProvider>
       <BrowserRouter basename={basename}>
+        <Seo base={basename} />
         <Routes>
           <Route element={<AssessmentLayout />}>
             <Route index element={<AssessmentIntro />} />

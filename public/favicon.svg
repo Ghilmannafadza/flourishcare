@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 186">
+  <defs><mask id="fcm"><rect width="200" height="186" fill="#fff"/><circle cx="100" cy="122" r="54" fill="#000"/></mask></defs>
+  <g fill="#F5BB3E"><rect x="94.0" y="1.0" width="12" height="18" rx="6" transform="rotate(0 100.0 10.0)"/><rect x="33.2" y="26.2" width="12" height="18" rx="6" transform="rotate(-45 39.2 35.2)"/><rect x="154.8" y="26.2" width="12" height="18" rx="6" transform="rotate(45 160.8 35.2)"/><rect x="8.0" y="87.0" width="12" height="18" rx="6" transform="rotate(270 14.0 96.0)"/><rect x="180.0" y="87.0" width="12" height="18" rx="6" transform="rotate(90 186.0 96.0)"/><rect x="33.2" y="147.8" width="12" height="18" rx="6" transform="rotate(225 39.2 156.8)"/><rect x="154.8" y="147.8" width="12" height="18" rx="6" transform="rotate(135 160.8 156.8)"/></g>
+  <circle cx="100" cy="96" r="66" fill="#F29935" mask="url(#fcm)"/>
+  <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round"><path d="M68 54 q6 -7 12 0"/><path d="M94 46 q6 -7 12 0"/></g>
+  <g fill="none" stroke="#F29935" stroke-width="3.6" stroke-linecap="round"><path d="M93 92 q4.5 -5.5 9 0"/><path d="M111 90 q4.5 -5.5 9 0"/><path d="M101 101 q5.5 5 11 -1"/></g>
+</svg>

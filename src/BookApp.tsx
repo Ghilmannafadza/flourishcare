@@ -1,3 +1,4 @@
+import { Seo } from "./components/Seo";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./providers/AuthProvider";
@@ -59,6 +60,7 @@ export default function BookApp({ basename = "/book" }: { basename?: string }) {
     <AuthProvider>
       <BookWizardProvider>
         <BrowserRouter basename={basename}>
+          <Seo base={basename} />
           <Routes>
             <Route element={<BookLayout />}>
               <Route index element={<BookLanding />} />

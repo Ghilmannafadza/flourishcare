@@ -1,5 +1,15 @@
 {
   "rewrites": [
+    { "source": "/book", "destination": "/book/index.html" },
+    { "source": "/book/:path*", "destination": "/book/index.html" },
+    { "source": "/assessment", "destination": "/assessment/index.html" },
+    { "source": "/assessment/:path*", "destination": "/assessment/index.html" },
+    { "source": "/services", "destination": "/services/index.html" },
+    { "source": "/team", "destination": "/team/index.html" },
+    { "source": "/about", "destination": "/about/index.html" },
+    { "source": "/booking", "destination": "/booking/index.html" },
+    { "source": "/progress", "destination": "/progress/index.html" },
+    { "source": "/login", "destination": "/login/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -10,6 +20,14 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(self), geolocation=(self), microphone=()" }
       ]
+    },
+    {
+      "source": "/(dashboard|portal|login)(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/og/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }]
     }
   ]
 }
