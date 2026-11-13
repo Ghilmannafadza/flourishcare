@@ -13,8 +13,8 @@ export function BookLanding() {
 
   const startBooking = (mode: "online" | "homecare") => {
     update({ mode });
-    if (session) navigate("/book/profile");
-    else navigate("/signup?next=/book/profile");
+    if (session) navigate("/profile");
+    else navigate("/signup?next=/profile");
   };
 
   return (
@@ -93,7 +93,7 @@ export function BookLanding() {
       </div>
 
       <Button asChild className="mt-8 rounded-full w-full sm:w-auto sm:mx-auto sm:flex" size="lg">
-        <Link to={session ? "/book/profile" : "/signup?next=/book/profile"}>
+        <Link to={session ? "/profile" : "/signup?next=/profile"}>
           Mulai Booking Sekarang
         </Link>
       </Button>

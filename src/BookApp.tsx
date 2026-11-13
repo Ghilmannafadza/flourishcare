@@ -54,26 +54,26 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function BookApp() {
+export default function BookApp({ basename = "/book" }: { basename?: string }) {
   return (
     <AuthProvider>
       <BookWizardProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={basename}>
           <Routes>
             <Route element={<BookLayout />}>
               <Route index element={<BookLanding />} />
               <Route path="signup" element={<BookSignUp />} />
               <Route path="login" element={<BookLogin />} />
               <Route
-                path="book/profile"
+                path="profile"
                 element={<RequireAuth><StepProfile /></RequireAuth>}
               />
               <Route
-                path="book/schedule"
+                path="schedule"
                 element={<RequireAuth><StepSchedule /></RequireAuth>}
               />
               <Route
-                path="book/payment"
+                path="payment"
                 element={<RequireAuth><StepPayment /></RequireAuth>}
               />
               <Route path="success" element={<BookSuccess />} />

@@ -1,10 +1,10 @@
 // Edge Function: create_online_payment
-// Dipanggil dari book.flourishcare.id (atau dashboard admin) untuk membuat QRIS dinamis Sumopod.
+// Dipanggil dari flourishcare.id/book (atau dashboard admin) untuk membuat QRIS dinamis Sumopod.
 //
 // Deploy:  supabase functions deploy create_online_payment
 // Secrets (Supabase Dashboard → Edge Functions → Secrets) — JANGAN ditulis di kode/komentar:
 //   SUMOPOD_API_KEY   = (API key dari dashboard Sumopod)
-//   PUBLIC_APP_URL    = https://book.flourishcare.id
+//   PUBLIC_APP_URL    = https://flourishcare.id/book
 //   SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY (otomatis tersedia)
 //
 // Aturan (serah-terima PM):
@@ -99,7 +99,7 @@ serve(async (req) => {
     }
 
     const orderId = `${booking.code}-P${Date.now().toString().slice(-6)}`;
-    const baseUrl = Deno.env.get("PUBLIC_APP_URL") ?? "https://book.flourishcare.id";
+    const baseUrl = (Deno.env.get("PUBLIC_APP_URL") ?? "https://flourishcare.id/book").replace(/\/$/, "");
     const localExpiry = booking.payment_expires_at
       ? new Date(booking.payment_expires_at).toISOString()
       : new Date(Date.now() + 24 * 3600_000).toISOString();

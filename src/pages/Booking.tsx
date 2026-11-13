@@ -168,7 +168,7 @@ export function Booking() {
             )}
             <p className="text-sm text-text-secondary mt-3 bg-background border border-primary/10 rounded-2xl px-4 py-3">
               Isi data anak dan orang tua sebelum kunjungan pertama di{" "}
-              <a href="https://assessment.flourishcare.id" className="text-primary font-semibold hover:underline">formulir pendaftaran</a>.
+              <a href="/assessment" className="text-primary font-semibold hover:underline">formulir pendaftaran</a>.
               Hubungi admin kembali setelah mengisi formulir pendaftaran.
             </p>
           </div>

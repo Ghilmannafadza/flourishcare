@@ -28,7 +28,7 @@ export const SOCIAL = {
 
 // Booking online (konsultasi psikolog online, subdomain terpisah)
 export const BOOKING_ONLINE_URL =
-  import.meta.env.VITE_BOOKING_ONLINE_URL ?? "https://book.flourishcare.id/";
+  import.meta.env.VITE_BOOKING_ONLINE_URL ?? "https://flourishcare.id/book";
 export const BOOKING_ONLINE_STATUS: "coming_soon" | "live" =
   (import.meta.env.VITE_BOOKING_ONLINE_STATUS as "coming_soon" | "live") ??
   "coming_soon";

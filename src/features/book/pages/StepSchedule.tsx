@@ -43,7 +43,7 @@ export function StepSchedule() {
   useEffect(() => {
     const childOk = data.child_id || (data.parent_name && data.child_name && data.child_dob && data.child_gender);
     if (!childOk || !data.consultation_topic) {
-      navigate("/book/profile", { replace: true });
+      navigate("/profile", { replace: true });
     }
   }, [data, navigate]);
 
@@ -193,7 +193,7 @@ export function StepSchedule() {
 
   function submit() {
     if (!data.scheduled_date || !data.scheduled_time) return;
-    navigate("/book/payment");
+    navigate("/payment");
   }
 
   return (

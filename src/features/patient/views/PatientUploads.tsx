@@ -156,8 +156,8 @@ export function PatientUploads() {
         <h3 className="font-heading font-bold text-lg mb-1">Belum ada anak terdaftar</h3>
         <p className="text-sm text-text-secondary max-w-md mx-auto">
           Selesaikan pendaftaran di{" "}
-          <a href="https://assessment.flourishcare.id" className="text-primary underline">
-            assessment.flourishcare.id
+          <a href="/assessment" className="text-primary underline">
+            flourishcare.id/assessment
           </a>{" "}
           agar nomor RM dapat diterbitkan.
         </p>

@@ -216,7 +216,7 @@ export function Login() {
 
           <p className="text-xs text-text-secondary text-center mt-6 pt-4 border-t border-black/5">
             Belum punya akun?{" "}
-            <a href="https://book.flourishcare.id/signup" className="text-primary font-semibold hover:underline">
+            <a href="/book/signup" className="text-primary font-semibold hover:underline">
               Daftar di sini
             </a>
           </p>

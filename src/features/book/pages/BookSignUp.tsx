@@ -17,7 +17,7 @@ export function BookSignUp() {
   const { session } = useAuth();
   const { update } = useWizard();
 
-  const next = params.get("next") ?? "/book/profile";
+  const next = params.get("next") ?? "/profile";
 
   useEffect(() => {
     if (session) navigate(next, { replace: true });
@@ -36,7 +36,7 @@ export function BookSignUp() {
     try {
       const { error: err } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}${next}` },
+        options: { redirectTo: `${window.location.origin}/book${next}` },
       });
       if (err) throw err;
     } catch (e) {

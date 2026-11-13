@@ -125,7 +125,7 @@ export function DevelopmentReportsView() {
       <EmptyState
         icon={LineChart}
         title="Belum ada pasien dengan RM"
-        description="Pasien di sini hanya yang sudah mengisi Form Pendaftaran (assessment.flourishcare.id) dan sudah diberi Nomor RM oleh admin di tab Pendaftaran Pasien. Data booking online tidak muncul di sini."
+        description="Pasien di sini hanya yang sudah mengisi Form Pendaftaran (flourishcare.id/assessment) dan sudah diberi Nomor RM oleh admin di tab Pendaftaran Pasien. Data booking online tidak muncul di sini."
       />
     );
 

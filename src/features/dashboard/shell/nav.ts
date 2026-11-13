@@ -62,7 +62,7 @@ export const NAV: NavProduct[] = [
     icon: Users,
     pages: [
       { key: "patients", slug: "", label: "Data Pasien", desc: "Pasien ber-No. RM: kode akses portal orang tua, tim terapis, dan penghapusan data.", icon: Users, roles: ["super_admin", "admin_cabang", "psikolog", "terapis"] },
-      { key: "registrations", slug: "pendaftaran", label: "Pendaftaran", desc: "Formulir pendaftaran dari assessment.flourishcare.id. Beri No. RM untuk menjadikannya pasien.", icon: UserPlus, roles: ADMIN },
+      { key: "registrations", slug: "pendaftaran", label: "Pendaftaran", desc: "Formulir pendaftaran dari flourishcare.id/assessment. Beri No. RM untuk menjadikannya pasien.", icon: UserPlus, roles: ADMIN },
       { key: "search", slug: "cari", label: "Pencarian", desc: "Cari nama anak, kode booking, No. RM, atau nomor WhatsApp di semua data.", icon: Search, roles: ADMIN },
     ],
   },

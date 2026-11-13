@@ -6,23 +6,41 @@ import AssessmentApp from "./AssessmentApp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 
-// Deteksi subdomain untuk pilih app root.
-// Dev override: `?book=1` atau `?assessment=1` untuk paksa render tanpa DNS.
-function pickApp(): typeof App {
-  if (typeof window === "undefined") return App;
-  const host = window.location.hostname;
-  const params = new URLSearchParams(window.location.search);
-  if (host.startsWith("book.") || params.get("book") === "1") return BookApp;
-  if (host.startsWith("assessment.") || params.get("assessment") === "1") return AssessmentApp;
-  return App;
+// Booking online & formulir pendaftaran sekarang berupa PATH di domain utama:
+//   flourishcare.id/book        (dulu book.flourishcare.id)
+//   flourishcare.id/assessment  (dulu assessment.flourishcare.id)
+// Subdomain lama (bila masih diarahkan ke Vercel) otomatis dialihkan ke path baru.
+
+function isUnder(path: string, base: string) {
+  return path === base || path.startsWith(base + "/");
 }
 
-const RootApp = pickApp();
+function redirectLegacySubdomain(): boolean {
+  if (typeof window === "undefined") return false;
+  const { hostname, pathname, search, hash } = window.location;
+  const map: Record<string, string> = { "book.": "/book", "assessment.": "/assessment" };
+  for (const [prefix, base] of Object.entries(map)) {
+    if (hostname.startsWith(prefix)) {
+      const root = hostname.slice(prefix.length);
+      const rest = pathname === "/" ? "" : pathname;
+      window.location.replace(`https://${root}${base}${rest}${search}${hash}`);
+      return true;
+    }
+  }
+  return false;
+}
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <RootApp />
-    </ErrorBoundary>
-  </StrictMode>
-);
+function pickApp() {
+  const path = typeof window === "undefined" ? "/" : window.location.pathname;
+  if (isUnder(path, "/book")) return <BookApp basename="/book" />;
+  if (isUnder(path, "/assessment")) return <AssessmentApp basename="/assessment" />;
+  return <App />;
+}
+
+if (!redirectLegacySubdomain()) {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <ErrorBoundary>{pickApp()}</ErrorBoundary>
+    </StrictMode>
+  );
+}

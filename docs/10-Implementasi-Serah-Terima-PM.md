@@ -23,7 +23,7 @@ Dokumen ini mencatat apa yang sudah diterapkan dari `FlourishCare_Serah_Terima_P
    - `SUMOPOD_API_KEY`: **buat key baru**, karena key lama pernah tertulis di repo.
    - `SUMOPOD_WEBHOOK_TOKEN`: string acak panjang.
    - `SUMOPOD_WEBHOOK_SECRET`: opsional, bila Sumopod mengirim header tanda tangan.
-   - `PUBLIC_APP_URL=https://book.flourishcare.id`
+   - `PUBLIC_APP_URL=https://flourishcare.id/book` (booking & pendaftaran kini berupa path: `/book` dan `/assessment`)
 5. **URL webhook di dashboard Sumopod:** ganti menjadi
    `https://vtquhqdfyirccxdzmpyr.supabase.co/functions/v1/sumopod_webhook?token=<SUMOPOD_WEBHOOK_TOKEN>`.
    Tanpa `?token=`, webhook akan ditolak (401).

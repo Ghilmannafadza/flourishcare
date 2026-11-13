@@ -14,7 +14,7 @@ export function BookLogin() {
   const [params] = useSearchParams();
   const { session } = useAuth();
 
-  const next = params.get("next") ?? "/book/profile";
+  const next = params.get("next") ?? "/profile";
 
   useEffect(() => {
     if (session) navigate(next, { replace: true });
@@ -25,7 +25,7 @@ export function BookLogin() {
     setError(null);
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}${next}` },
+      options: { redirectTo: `${window.location.origin}/book${next}` },
     });
     if (err) { setError(err.message); setLoading(false); }
   }

@@ -66,7 +66,7 @@ export function StepProfile() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // Validasi minimal sudah lewat native `required`. Lanjut.
-    navigate("/book/schedule");
+    navigate("/schedule");
   }
 
   return (

@@ -148,7 +148,7 @@ export function OnlineBookingsView() {
     return (
       <EmptyState
         title="Belum ada booking online"
-        description="Booking dari subdomain book.flourishcare.id akan tampil di sini."
+        description="Booking dari flourishcare.id/book akan tampil di sini."
         icon={Video}
       />
     );

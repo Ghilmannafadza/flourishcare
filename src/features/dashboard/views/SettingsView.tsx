@@ -171,7 +171,7 @@ function PricingSection() {
         <Wallet size={18} className="text-primary" /> Harga Booking Online
       </h3>
       <p className="text-xs text-text-secondary mb-4">
-        Harga yang tampil di halaman <span className="font-mono">book.flourishcare.id</span>.
+        Harga yang tampil di halaman <span className="font-mono">flourishcare.id/book</span>.
       </p>
 
       {loading ? (
@@ -877,7 +877,7 @@ function BookableStaffSection() {
         <UserCog size={18} className="text-primary" /> Kelola Psikolog di Booking Online
       </h3>
       <p className="text-xs text-text-secondary mb-4">
-        Atur siapa yang muncul di halaman <span className="font-mono">book.flourishcare.id</span>.
+        Atur siapa yang muncul di halaman <span className="font-mono">flourishcare.id/book</span>.
         Nonaktifkan toggle untuk menyembunyikan psikolog dari daftar booking (tanpa menghapus data mereka).
       </p>
 

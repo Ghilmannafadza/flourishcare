@@ -67,7 +67,7 @@ export function RegistrationsView() {
 
   if (loading) return <LoadingBlock />;
   if (rows.length === 0)
-    return <EmptyState title="Belum ada pendaftaran" description="Form pendaftaran dari assessment.flourishcare.id akan tampil di sini." icon={ClipboardList} />;
+    return <EmptyState title="Belum ada pendaftaran" description="Form pendaftaran dari flourishcare.id/assessment akan tampil di sini." icon={ClipboardList} />;
 
   const pending = rows.filter((r) => r.status === "pending_rm");
   const assigned = rows.filter((r) => r.status === "rm_assigned");

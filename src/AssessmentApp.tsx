@@ -5,10 +5,10 @@ import { AssessmentIntro } from "./features/assessment/pages/AssessmentIntro";
 import { AssessmentForm } from "./features/assessment/pages/AssessmentForm";
 import { AssessmentSuccess } from "./features/assessment/pages/AssessmentSuccess";
 
-export default function AssessmentApp() {
+export default function AssessmentApp({ basename = "/assessment" }: { basename?: string }) {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <Routes>
           <Route element={<AssessmentLayout />}>
             <Route index element={<AssessmentIntro />} />

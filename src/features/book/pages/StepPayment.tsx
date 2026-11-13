@@ -66,7 +66,7 @@ export function StepPayment() {
 
   useEffect(() => {
     if (!data.scheduled_date || !data.scheduled_time || !data.psychologist_id) {
-      navigate("/book/schedule", { replace: true });
+      navigate("/schedule", { replace: true });
     }
   }, [data, navigate]);
 
